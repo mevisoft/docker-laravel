@@ -41,6 +41,8 @@ RUN apt-get update && \
 # Instalar Composer
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
+COPY ./bin/run-app /usr/local/bin
+RUN chmod +x /usr/local/bin/run-app
 # Establecer directorio de trabajo
 WORKDIR /var/www/html
 
@@ -48,7 +50,7 @@ WORKDIR /var/www/html
 #COPY --chown=1000:1000 . /var/www/html
 
 # Copy entrypoint script
-COPY docker/build/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 #RUN composer prod && \
