@@ -21,9 +21,20 @@ RUN apt-get update && \
         libmagickwand-dev \
       && docker-php-ext-configure ldap --with-libdir="lib/$(gcc -dumpmachine)" \
     && docker-php-ext-configure gd --with-freetype --with-jpeg \
-    && docker-php-ext-install -j$(nproc) pdo_mysql gd ldap zip intl bcmath mbstring pcntl xml \
-        opcache \
-        exif \
+    && docker-php-ext-install -j$(nproc) \
+    pdo_mysql \
+    pdo_pgsql \
+    pgsql \
+    gd \
+    ldap \
+    zip \
+    intl \
+    bcmath \
+    mbstring \
+    pcntl \
+    xml \
+    opcache \
+    exif \
     && pecl install redis imagick  && \
     docker-php-ext-enable redis imagick && \
     apt-get clean && \
