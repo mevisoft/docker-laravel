@@ -1,0 +1,8 @@
+.git
+.env
+.env.smoke
+docs/
+tests/
+smoke-test.sh
+build.sh
+README.md
