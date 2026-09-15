@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+echo "rsync $*" >> "$STUB_LOG"
+exit 0

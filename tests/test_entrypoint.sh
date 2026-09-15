@@ -49,4 +49,73 @@ assert_eq "sin APP_KEY falla" "1" "$?"
 ( GIT_REPO=acme/shop APP_KEY=base64:x validate_env ) 2>/dev/null
 assert_eq "con ambas pasa" "0" "$?"
 
+echo "init (produccion, fresh):"
+WORK="$(mktemp -d)"
+export STUB_LOG="$WORK/log"
+: > "$STUB_LOG"
+env PATH="$PWD/tests/stubs:$PATH" \
+    APP_DIR="$WORK/app" DATA_DIR="$WORK/data" \
+    GIT_REPO=acme/shop GIT_BRANCH=main GITHUB_PAT=ghp_xxx \
+    APP_KEY=base64:x APP_ENV=production \
+    REDEPLOY_STRATEGY=fresh BUILD_ASSETS=true RUN_MIGRATIONS=true \
+    DB_CONNECTION=sqlite DB_DATABASE="$WORK/data/database.sqlite" \
+    ./entrypoint.sh init >/dev/null 2>&1
+assert_eq "init termina bien" "0" "$?"
+
+LOG="$(cat "$STUB_LOG")"
+grep -q -- "--branch main" <<< "$LOG"
+assert_eq "clona la rama configurada" "0" "$?"
+grep -q "x-access-token:ghp_xxx" <<< "$LOG"
+assert_eq "el clone usa el PAT" "0" "$?"
+grep -q -- "rsync .*--delete" <<< "$LOG"
+assert_eq "fresh pasa --delete a rsync" "0" "$?"
+grep -q -- "--exclude=/.git" <<< "$LOG"
+assert_eq "rsync excluye .git" "0" "$?"
+grep -q -- "--exclude=/storage" <<< "$LOG"
+assert_eq "rsync excluye storage" "0" "$?"
+grep -q -- "composer install --no-dev" <<< "$LOG"
+assert_eq "produccion instala sin dev" "0" "$?"
+grep -q "npm run build" <<< "$LOG"
+assert_eq "compila los assets" "0" "$?"
+grep -q "migrate --force" <<< "$LOG"
+assert_eq "corre migraciones" "0" "$?"
+grep -q "config:cache" <<< "$LOG"
+assert_eq "produccion cachea config" "0" "$?"
+assert_eq "crea storage/framework/views" "0" \
+  "$([ -d "$WORK/app/storage/framework/views" ] && echo 0 || echo 1)"
+assert_eq "crea el archivo sqlite" "0" \
+  "$([ -f "$WORK/data/database.sqlite" ] && echo 0 || echo 1)"
+assert_eq "el PAT no queda en app" "" \
+  "$(grep -rl ghp_xxx "$WORK/app" 2>/dev/null)"
+
+echo "init (local, update):"
+: > "$STUB_LOG"
+env PATH="$PWD/tests/stubs:$PATH" \
+    APP_DIR="$WORK/app2" DATA_DIR="$WORK/data2" \
+    GIT_REPO=acme/shop APP_KEY=base64:x APP_ENV=local \
+    REDEPLOY_STRATEGY=update BUILD_ASSETS=false RUN_MIGRATIONS=false \
+    ./entrypoint.sh init >/dev/null 2>&1
+LOG="$(cat "$STUB_LOG")"
+grep -q -- "--delete" <<< "$LOG"
+assert_eq "update no borra" "1" "$?"
+grep -q "npm run build" <<< "$LOG"
+assert_eq "no compila si BUILD_ASSETS=false" "1" "$?"
+grep -q "config:cache" <<< "$LOG"
+assert_eq "local no cachea" "1" "$?"
+
+echo "dispatch de roles:"
+for role in app schedule queue; do
+  : > "$STUB_LOG"
+  env PATH="$PWD/tests/stubs:$PATH" APP_DIR="$WORK/app" \
+      OCTANE_WORKERS=4 OCTANE_MAX_REQUESTS=500 QUEUE_OPTS="--tries=3" \
+      ./entrypoint.sh "$role" >/dev/null 2>&1
+  grep -q "php artisan" "$STUB_LOG"
+  assert_eq "el rol $role lanza artisan" "0" "$?"
+done
+: > "$STUB_LOG"
+env PATH="$PWD/tests/stubs:$PATH" ./entrypoint.sh php -v >/dev/null 2>&1
+assert_eq "comando libre se ejecuta tal cual" "php -v" "$(cat "$STUB_LOG")"
+
+rm -rf "$WORK"
+
 exit $FAILED

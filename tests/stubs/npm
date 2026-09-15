@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+echo "npm $*" >> "$STUB_LOG"
+exit 0

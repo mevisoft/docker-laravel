@@ -38,7 +38,93 @@ validate_env() {
   return $ok
 }
 
+APP_DIR="${APP_DIR:-/app}"
+DATA_DIR="${DATA_DIR:-/data}"
+
+do_init() {
+  validate_env
+
+  local url flags tmp
+  url="$(repo_url "$GIT_REPO" "${GITHUB_PAT:-}")"
+  flags="$(rsync_flags "${REDEPLOY_STRATEGY:-update}")"
+  tmp=/tmp/repo
+
+  echo "==> clonando ${GIT_REPO} (${GIT_BRANCH:-main})"
+  rm -rf "$tmp"
+  git clone --depth 1 --branch "${GIT_BRANCH:-main}" "$url" "$tmp"
+
+  echo "==> sincronizando a ${APP_DIR}"
+  mkdir -p "$APP_DIR"
+  rsync -a $flags --exclude=/.git --exclude=/storage --exclude=/.env "$tmp/" "$APP_DIR/"
+  rm -rf "$tmp"
+
+  mkdir -p "$APP_DIR"/storage/framework/{cache/data,sessions,views} \
+           "$APP_DIR"/storage/logs "$APP_DIR"/storage/app/public \
+           "$APP_DIR"/bootstrap/cache "$DATA_DIR"
+
+  if [ "${DB_CONNECTION:-sqlite}" = "sqlite" ]; then
+    touch "${DB_DATABASE:-$DATA_DIR/database.sqlite}"
+  fi
+
+  cd "$APP_DIR"
+
+  echo "==> composer (APP_ENV=${APP_ENV:-production})"
+  if [ "${APP_ENV:-production}" = "production" ]; then
+    composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist
+  else
+    composer install --no-interaction
+  fi
+
+  if [ "${BUILD_ASSETS:-true}" = "true" ]; then
+    echo "==> compilando assets"
+    npm ci
+    npm run build
+  fi
+
+  php artisan storage:link || true
+
+  if [ "${RUN_MIGRATIONS:-false}" = "true" ]; then
+    echo "==> migraciones"
+    php artisan migrate --force
+  fi
+
+  if [ "${APP_ENV:-production}" = "production" ]; then
+    echo "==> cacheando configuracion"
+    php artisan config:cache
+    php artisan route:cache
+    php artisan view:cache
+  fi
+
+  chown -R app:app "$APP_DIR" "$DATA_DIR"
+  echo "==> init completado"
+}
+
+main() {
+  case "${1:-}" in
+    init)
+      do_init
+      ;;
+    app)
+      cd "$APP_DIR"
+      exec php artisan octane:start --server=frankenphp \
+        --host=0.0.0.0 --port=8000 \
+        --workers="${OCTANE_WORKERS:-auto}" \
+        --max-requests="${OCTANE_MAX_REQUESTS:-500}"
+      ;;
+    schedule)
+      cd "$APP_DIR"
+      exec php artisan schedule:work
+      ;;
+    queue)
+      cd "$APP_DIR"
+      exec php artisan queue:work ${QUEUE_OPTS:---tries=3 --timeout=90}
+      ;;
+    *)
+      exec "$@"
+      ;;
+  esac
+}
+
 if [ "${ENTRYPOINT_SOURCED:-}" != "1" ]; then
-  echo "main aun no implementada" >&2
-  exit 1
+  main "$@"
 fi
