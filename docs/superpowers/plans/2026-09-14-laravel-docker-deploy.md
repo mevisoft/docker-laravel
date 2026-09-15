@@ -511,13 +511,13 @@ Expected: termina con `naming to docker.io/library/laravel-deploy:test done`.
 
 Run:
 ```bash
-docker run --rm laravel-deploy:test php -m | grep -E '^(pcntl|pdo_sqlite|opcache)$'
+docker run --rm laravel-deploy:test php -m | grep -iE '^(pcntl|pdo_sqlite|zend opcache)$'
 docker run --rm laravel-deploy:test node --version
 docker run --rm laravel-deploy:test composer --version
 docker run --rm laravel-deploy:test id -u
 docker run --rm laravel-deploy:test rsync --version | head -1
 ```
-Expected: las tres extensiones listadas, `v22.x.x`, `Composer version 2.x.x`, `1000`, y la versión de rsync. Que `php -m` responda confirma además que el caso default del `case` ejecuta comandos libres.
+Expected: las tres extensiones listadas — OPcache aparece como `Zend OPcache`, que es como PHP nombra ese módulo en `php -m`, no como `opcache` — luego `v22.x.x`, `Composer version 2.x.x`, `1000`, y la versión de rsync. Que `php -m` responda confirma además que el caso default del `case` ejecuta comandos libres.
 
 - [ ] **Step 5: Verificar que falta la configuración obligatoria**
 
