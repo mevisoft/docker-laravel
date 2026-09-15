@@ -48,7 +48,7 @@ docker compose --env-file "$ENVF" -p "$PROJECT" up -d
 echo "==> esperando /up (max 180s)"
 for i in $(seq 1 90); do
   if curl -fsS "http://localhost:$PORT/up" >/dev/null 2>&1; then
-    echo "==> /up responde 200 tras ${i}0s aprox"
+    echo "==> /up responde 200 tras $((i * 2))s aprox"
     break
   fi
   if [ "$i" = 90 ]; then

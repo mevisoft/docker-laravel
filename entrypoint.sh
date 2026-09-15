@@ -76,8 +76,12 @@ do_init() {
     composer install --no-interaction
   fi
 
+  # composer show mira lo INSTALADO, no lo declarado: tras un install --no-dev,
+  # un proyecto que solo tenga Octane en require-dev cuenta aqui como ausente y
+  # se le instala para produccion. Es el resultado correcto, pero no leas esta
+  # condicion como "el proyecto no lo declara".
   if [ "${INSTALL_OCTANE:-true}" = "true" ] && ! composer show laravel/octane >/dev/null 2>&1; then
-    echo "==> instalando Octane (el proyecto no lo trae)"
+    echo "==> instalando Octane (no esta instalado en el proyecto)"
     # Sin octane:install a proposito: solo publica config/octane.php (la
     # config por defecto del paquete ya se fusiona sola) y escribe
     # OCTANE_SERVER en el .env, que el rol app no necesita porque ya pasa
@@ -93,7 +97,7 @@ do_init() {
     # configurado; lo unico que falta es que Octane quede registrado, y de
     # eso se encarga el package:discover manual de abajo.
     if [ "${APP_ENV:-production}" = "production" ]; then
-      composer require laravel/octane --no-interaction --update-no-dev --no-scripts
+      composer require laravel/octane --no-interaction --update-no-dev --no-scripts --optimize-autoloader
     else
       composer require laravel/octane --no-interaction --no-scripts
     fi
