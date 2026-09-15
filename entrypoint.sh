@@ -76,9 +76,41 @@ do_init() {
     composer install --no-interaction
   fi
 
+  if [ "${INSTALL_OCTANE:-true}" = "true" ] && ! composer show laravel/octane >/dev/null 2>&1; then
+    echo "==> instalando Octane (el proyecto no lo trae)"
+    # Sin octane:install a proposito: solo publica config/octane.php (la
+    # config por defecto del paquete ya se fusiona sola) y escribe
+    # OCTANE_SERVER en el .env, que el rol app no necesita porque ya pasa
+    # --server=frankenphp explicito a octane:start. Ademas el .env lo monta
+    # el host de solo lectura (lleva el PAT) y octane:install fallaria al
+    # intentar escribirlo.
+    #
+    # --no-scripts en las dos ramas: un post-update-cmd de terceros que
+    # invoque una dev-dependency ausente (por ejemplo Laravel Boost, que
+    # trae "@php artisan boost:update" atado a un require-dev) tumbaria
+    # este require y con el todo el init. composer install ya corrio antes
+    # con los scripts del proyecto intactos, asi que el proyecto ya esta
+    # configurado; lo unico que falta es que Octane quede registrado, y de
+    # eso se encarga el package:discover manual de abajo.
+    if [ "${APP_ENV:-production}" = "production" ]; then
+      composer require laravel/octane --no-interaction --update-no-dev --no-scripts
+    else
+      composer require laravel/octane --no-interaction --no-scripts
+    fi
+    php artisan package:discover
+  fi
+
   if [ "${BUILD_ASSETS:-true}" = "true" ]; then
     echo "==> compilando assets"
-    npm ci
+    # El esqueleto oficial de laravel/laravel no comitea package-lock.json,
+    # y npm ci exige que exista. Sin este condicional, init moriria en
+    # cualquier repo Laravel que no comitee su lockfile. No lo simplifiques
+    # de vuelta a un npm ci unico.
+    if [ -f package-lock.json ]; then
+      npm ci
+    else
+      npm install
+    fi
     npm run build
   fi
 
@@ -96,7 +128,10 @@ do_init() {
     php artisan view:cache
   fi
 
-  chown -R app:app "$APP_DIR" "$DATA_DIR"
+  # El .env lo monta el host como :ro (lleva el PAT), asi que hay que
+  # saltarselo: un chown -R sobre /app moriria con "Read-only file system".
+  find "$APP_DIR" -path "$APP_DIR/.env" -prune -o -print0 | xargs -0 -r chown app:app
+  chown -R app:app "$DATA_DIR"
   echo "==> init completado"
 }
 

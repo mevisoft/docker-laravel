@@ -53,6 +53,9 @@ echo "init (produccion, fresh):"
 WORK="$(mktemp -d)"
 export STUB_LOG="$WORK/log"
 : > "$STUB_LOG"
+mkdir -p "$WORK/app"
+echo '{}' > "$WORK/app/package-lock.json"
+touch "$WORK/app/.env"
 env PATH="$PWD/tests/stubs:$PATH" \
     APP_DIR="$WORK/app" DATA_DIR="$WORK/data" \
     GIT_REPO=acme/shop GIT_BRANCH=main GITHUB_PAT=ghp_xxx \
@@ -77,6 +80,8 @@ grep -q -- "composer install --no-dev" <<< "$LOG"
 assert_eq "produccion instala sin dev" "0" "$?"
 grep -q "npm run build" <<< "$LOG"
 assert_eq "compila los assets" "0" "$?"
+grep -q "npm ci" <<< "$LOG"
+assert_eq "con package-lock.json usa npm ci" "0" "$?"
 grep -q "migrate --force" <<< "$LOG"
 assert_eq "corre migraciones" "0" "$?"
 grep -q "config:cache" <<< "$LOG"
@@ -87,6 +92,42 @@ assert_eq "crea el archivo sqlite" "0" \
   "$([ -f "$WORK/data/database.sqlite" ] && echo 0 || echo 1)"
 assert_eq "el PAT no queda en app" "" \
   "$(grep -rl ghp_xxx "$WORK/app" 2>/dev/null)"
+grep "^chown" <<< "$LOG" | grep -q -- "$WORK/app/.env"
+assert_eq "chown no toca el .env montado" "1" "$?"
+grep "^chown" <<< "$LOG" | grep -q -- "$WORK/app/package-lock.json"
+assert_eq "chown si toca otros archivos de app" "0" "$?"
+grep -q "composer require laravel/octane" <<< "$LOG"
+assert_eq "octane ya declarado no lo reinstala" "1" "$?"
+
+echo "init (octane no declarado):"
+: > "$STUB_LOG"
+env PATH="$PWD/tests/stubs:$PATH" STUB_OCTANE_SHOW_EXIT=1 \
+    APP_DIR="$WORK/app-octane" DATA_DIR="$WORK/data-octane" \
+    GIT_REPO=acme/shop APP_KEY=base64:x APP_ENV=production \
+    BUILD_ASSETS=false RUN_MIGRATIONS=false \
+    ./entrypoint.sh init >/dev/null 2>&1
+assert_eq "init termina bien sin octane declarado" "0" "$?"
+LOG="$(cat "$STUB_LOG")"
+grep -q -- "composer require laravel/octane --no-interaction --update-no-dev --no-scripts" <<< "$LOG"
+assert_eq "octane ausente lo instala (produccion respeta no-dev, sin scripts de terceros)" "0" "$?"
+grep -q "artisan octane:install" <<< "$LOG"
+assert_eq "no corre octane:install (escribiria en el .env de solo lectura)" "1" "$?"
+grep -q "artisan package:discover" <<< "$LOG"
+assert_eq "corre package:discover a mano tras el require sin scripts" "0" "$?"
+
+echo "init (sin package-lock.json):"
+: > "$STUB_LOG"
+mkdir -p "$WORK/app-nolock"
+env PATH="$PWD/tests/stubs:$PATH" \
+    APP_DIR="$WORK/app-nolock" DATA_DIR="$WORK/data-nolock" \
+    GIT_REPO=acme/shop APP_KEY=base64:x APP_ENV=production \
+    BUILD_ASSETS=true RUN_MIGRATIONS=false \
+    ./entrypoint.sh init >/dev/null 2>&1
+LOG="$(cat "$STUB_LOG")"
+grep -q "npm install" <<< "$LOG"
+assert_eq "sin package-lock.json usa npm install" "0" "$?"
+grep -q "npm ci" <<< "$LOG"
+assert_eq "sin package-lock.json no usa npm ci" "1" "$?"
 
 echo "init (local, update):"
 : > "$STUB_LOG"
