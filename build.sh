@@ -6,7 +6,10 @@ cd "$(dirname "$0")"
 
 read_env() {
   local val
-  val="$(grep -E "^$1=" .env | tail -1 | cut -d= -f2-)"
+  # tr/sed: un .env guardado en Windows deja un \r al final del valor, y el
+  # guard de no-vacio no lo detecta: la referencia de imagen sale corrupta y
+  # docker falla luego con un error que no apunta a la causa.
+  val="$(grep -E "^$1=" .env | tail -1 | cut -d= -f2- | tr -d '\r' | sed 's/[[:space:]]*$//')"
   printf '%s\n' "${val:-${2:-}}"
 }
 
