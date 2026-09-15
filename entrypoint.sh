@@ -51,6 +51,7 @@ do_init() {
 
   echo "==> clonando ${GIT_REPO} (${GIT_BRANCH:-main})"
   rm -rf "$tmp"
+  trap 'rm -rf /tmp/repo' EXIT
   git clone --depth 1 --branch "${GIT_BRANCH:-main}" "$url" "$tmp"
 
   echo "==> sincronizando a ${APP_DIR}"

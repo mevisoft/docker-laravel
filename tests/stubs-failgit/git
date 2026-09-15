@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+echo "git $*" >> "$STUB_LOG"
+mkdir -p /tmp/repo/.git
+echo "url = https://x-access-token:ghp_xxx@github.com/acme/shop.git" > /tmp/repo/.git/config
+exit 1

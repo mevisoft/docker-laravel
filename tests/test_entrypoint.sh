@@ -103,6 +103,27 @@ assert_eq "no compila si BUILD_ASSETS=false" "1" "$?"
 grep -q "config:cache" <<< "$LOG"
 assert_eq "local no cachea" "1" "$?"
 
+echo "init (git clone falla, no debe dejar el PAT en /tmp/repo):"
+REPO_BACKUP=""
+if [ -e /tmp/repo ]; then
+  REPO_BACKUP="$(mktemp -d)"
+  mv /tmp/repo "$REPO_BACKUP/repo"
+fi
+: > "$STUB_LOG"
+env PATH="$PWD/tests/stubs-failgit:$PWD/tests/stubs:$PATH" \
+    APP_DIR="$WORK/app3" DATA_DIR="$WORK/data3" \
+    GIT_REPO=acme/shop GIT_BRANCH=main GITHUB_PAT=ghp_xxx \
+    APP_KEY=base64:x \
+    ./entrypoint.sh init >/dev/null 2>&1
+assert_eq "init termina mal si git clone falla" "1" "$?"
+assert_eq "/tmp/repo no sobrevive a un clone fallido" "1" \
+  "$([ -e /tmp/repo ] && echo 0 || echo 1)"
+if [ -n "$REPO_BACKUP" ]; then
+  rm -rf /tmp/repo
+  mv "$REPO_BACKUP/repo" /tmp/repo
+  rm -rf "$REPO_BACKUP"
+fi
+
 echo "dispatch de roles:"
 for role in app schedule queue; do
   : > "$STUB_LOG"
