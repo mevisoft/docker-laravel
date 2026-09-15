@@ -126,8 +126,15 @@ necesite.
    Laravel hasta que `init` clona el proyecto.
 
 3. **Sintaxis del `.env` compartido.** Compose y el dotenv de Laravel no parsean
-   igual: en ese archivo no van comillas alrededor de los valores ni `#` a mitad
-   de línea, porque Compose los pasaría literales. Advertencia al principio de
+   igual, y la regla correcta es más fina de lo que parece: nunca `#` a mitad de
+   línea, y **los valores que contengan espacios van entrecomillados**. El dotenv
+   de Laravel aborta ante un espacio sin comillas (`Failed to parse dotenv file.
+   Encountered unexpected whitespace`), y ese parseo ocurre durante
+   `composer install`, así que un `.env` mal formado tumba el `init` entero antes
+   de que exista ningún worker. Compose retira las comillas antes de pasar la
+   variable al contenedor — verificado: el valor que llega es idéntico con y sin
+   ellas — así que entrecomillar es seguro por ambos lados. En este proyecto el
+   único valor afectado es `QUEUE_OPTS`. Advertencia al principio de
    `.env.example`.
 
 ## Flujo del `init`

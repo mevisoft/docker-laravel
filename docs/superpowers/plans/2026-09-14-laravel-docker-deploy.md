@@ -554,8 +554,9 @@ Define la configuración y los cuatro servicios. `ENV_FILE` existe para que `smo
 cat > .env.example <<'EOF'
 # ---------------------------------------------------------------
 # IMPORTANTE: este archivo lo leen Docker Compose y Laravel a la vez.
-# No uses comillas alrededor de los valores ni # a mitad de linea:
-# Compose los pasaria literales al contenedor.
+# No pongas # a mitad de linea. Los valores con espacios SI van
+# entrecomillados: el dotenv de Laravel falla ante un espacio sin comillas,
+# y Compose las retira antes de pasar la variable al contenedor.
 # ---------------------------------------------------------------
 
 # --- Deploy ---
@@ -568,7 +569,7 @@ RUN_MIGRATIONS=false
 APP_PORT=8000
 OCTANE_WORKERS=auto
 OCTANE_MAX_REQUESTS=500
-QUEUE_OPTS=--tries=3 --timeout=90
+QUEUE_OPTS="--tries=3 --timeout=90"
 ENV_FILE=.env
 
 # --- Imagen y publicacion ---
@@ -795,7 +796,7 @@ RUN_MIGRATIONS=true
 APP_PORT=$PORT
 OCTANE_WORKERS=2
 OCTANE_MAX_REQUESTS=500
-QUEUE_OPTS=--tries=1 --timeout=30
+QUEUE_OPTS="--tries=1 --timeout=30"
 APP_KEY=base64:$(openssl rand -base64 32)
 APP_ENV=production
 APP_DEBUG=false
@@ -897,8 +898,10 @@ Todas las variables están documentadas en `.env.example`. Las principales:
 | `RUN_MIGRATIONS` | `true` corre `php artisan migrate --force` |
 | `APP_ENV` | `production` instala sin dev-dependencies y cachea config |
 
-**El `.env` lo leen Compose y Laravel a la vez:** no uses comillas alrededor de
-los valores ni `#` a mitad de línea.
+**El `.env` lo leen Compose y Laravel a la vez:** nunca pongas `#` a mitad de
+línea, y entrecomilla los valores que tengan espacios — el dotenv de Laravel
+falla ante un espacio sin comillas, y Compose las retira antes de pasar la
+variable al contenedor.
 
 ## Base de datos
 
