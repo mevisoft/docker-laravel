@@ -653,8 +653,11 @@ Expected: imprime el YAML resuelto sin errores, con los cuatro servicios, `user:
 
 - [ ] **Step 4: Verificar el orden de arranque**
 
-Run: `docker compose config --services && docker compose config | grep -c service_completed_successfully`
+Run: `docker compose config --services && docker compose config | awk '/^services:/,/^volumes:/' | grep -c service_completed_successfully`
 Expected: los cuatro nombres de servicio, y `3` (app, schedule y queue esperan a `init`).
+El `awk` acota el conteo al bloque `services:` porque `docker compose config`
+conserva los campos de extensión `x-*`, y sin él el ancla `x-needs-init` se
+cuenta a sí misma y el total sale 4.
 
 - [ ] **Step 5: Commit**
 
