@@ -1,0 +1,46 @@
+x-app: &app
+  image: ${IMAGE}
+  env_file: ${ENV_FILE:-.env}
+  volumes:
+    - app_code:/app
+    - app_storage:/app/storage
+    - app_data:/data
+    - ./${ENV_FILE:-.env}:/app/.env:ro
+  restart: unless-stopped
+
+x-needs-init: &needs-init
+  depends_on:
+    init:
+      condition: service_completed_successfully
+
+services:
+  init:
+    <<: *app
+    command: init
+    user: "0:0"
+    restart: "no"
+
+  app:
+    <<: [*app, *needs-init]
+    command: app
+    ports:
+      - "${APP_PORT:-8000}:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/up"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  schedule:
+    <<: [*app, *needs-init]
+    command: schedule
+
+  queue:
+    <<: [*app, *needs-init]
+    command: queue
+
+volumes:
+  app_code:
+  app_storage:
+  app_data:
