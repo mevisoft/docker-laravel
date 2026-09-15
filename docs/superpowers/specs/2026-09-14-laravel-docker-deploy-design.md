@@ -96,7 +96,8 @@ read-only en `/app/.env`.
 | `GIT_BRANCH` | `main` | Rama o tag |
 | `GITHUB_PAT` | vacío | Vacío = repositorio público |
 | `REDEPLOY_STRATEGY` | `update` | `fresh` añade `--delete` al rsync |
-| `BUILD_ASSETS` | `true` | `npm ci && npm run build` |
+| `BUILD_ASSETS` | `true` | Compila los assets. `npm ci` si hay `package-lock.json`, `npm install` si no |
+| `INSTALL_OCTANE` | `true` | Instala `laravel/octane` si el proyecto no lo declara |
 | `RUN_MIGRATIONS` | `false` | `php artisan migrate --force` |
 | `APP_PORT` | `8000` | Puerto publicado en el host |
 | `OCTANE_WORKERS` | `auto` | `--workers` de Octane |
@@ -148,11 +149,25 @@ creados. Con `set -euo pipefail`, cualquier paso fallido corta el arranque.
    `storage/app/public` y `bootstrap/cache`.
 4. Si `DB_CONNECTION=sqlite`, `touch` del archivo en `$DB_DATABASE`.
 5. `composer install`, en modo producción o normal según `APP_ENV`.
-6. Si `BUILD_ASSETS=true`: `npm ci && npm run build`.
-7. `php artisan storage:link` (tolerante a que ya exista).
-8. Si `RUN_MIGRATIONS=true`: `php artisan migrate --force`.
-9. Si `APP_ENV=production`: `config:cache`, `route:cache`, `view:cache`.
-10. `chown -R app:app /app /data`.
+6. Si `INSTALL_OCTANE=true` y el proyecto no declara `laravel/octane`:
+   `composer require laravel/octane` y `php artisan octane:install --server=frankenphp`.
+   Ningún proyecto Laravel trae Octane de serie, así que sin este paso el rol
+   `app` muere con «There are no commands defined in the "octane" namespace».
+   Si el proyecto ya lo declara no se toca nada: puede tener una versión fijada
+   a propósito. Va antes de las cachés para que la configuración de Octane entre
+   en ellas.
+7. Si `BUILD_ASSETS=true`: `npm ci` cuando existe `package-lock.json`,
+   `npm install` cuando no, y después `npm run build`. `npm ci` exige un
+   lockfile y aborta sin él, y el esqueleto oficial de Laravel no lo comitea.
+   No se encadena `npm ci || npm install`: eso enmascararía un lockfile
+   desincronizado y lo reescribiría en silencio.
+8. `php artisan storage:link` (tolerante a que ya exista).
+9. Si `RUN_MIGRATIONS=true`: `php artisan migrate --force`.
+10. Si `APP_ENV=production`: `config:cache`, `route:cache`, `view:cache`.
+11. `chown app:app` sobre `/app` y `/data`, **podando `/app/.env`**: ese archivo
+    lo monta el host como `:ro` porque lleva el PAT, y un `chown -R` sobre él
+    aborta con «Read-only file system». Se poda con `find -prune`, no se tolera
+    el error, para que cualquier otro fallo de `chown` siga siendo ruidoso.
 
 Los otros tres roles son una línea cada uno:
 
