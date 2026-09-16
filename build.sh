@@ -24,7 +24,24 @@ PLATFORMS="$(read_env PLATFORMS linux/amd64)"
 REF="$REGISTRY/$IMAGE_NAME:$TAG"
 echo "==> construyendo $REF ($PLATFORMS)"
 
-if [ "${PUSH:-true}" = "true" ]; then
+# Publicar NO es el default: subir una imagen a un registry es irreversible en la
+# practica (queda cacheada y replicada aunque luego la borres), asi que tiene que
+# pedirse a proposito. Sin PUSH=true esto solo construye en local.
+if [ "${PUSH:-false}" = "true" ]; then
+  if [ "${YES:-}" != "1" ]; then
+    if [ -t 0 ]; then
+      printf '==> se va a PUBLICAR %s en %s. Continuar? [y/N] ' "$REF" "$REGISTRY"
+      read -r respuesta
+      case "$respuesta" in
+        y|Y|s|S) ;;
+        *) echo "cancelado, no se ha publicado nada" >&2; exit 1 ;;
+      esac
+    else
+      # Sin terminal no hay a quien preguntar: abortar antes que publicar a ciegas.
+      echo "ERROR: publicar sin terminal requiere YES=1 (PUSH=true YES=1 ./build.sh)" >&2
+      exit 1
+    fi
+  fi
   docker buildx build --platform "$PLATFORMS" -t "$REF" --push .
   echo "==> publicada: $REF"
 else

@@ -57,10 +57,16 @@ delante para el TLS, y configura `TrustProxies` en tu aplicación.
 Configura `REGISTRY`, `IMAGE_NAME` y `TAG` en el `.env`, y:
 
 ```bash
-./build.sh            # publica con el TAG del .env
-./build.sh v1.2.0     # publica con un tag concreto
-PUSH=false ./build.sh # solo construye en local
+./build.sh                    # construye en local con el TAG del .env
+./build.sh v1.2.0             # construye en local con un tag concreto
+PUSH=true ./build.sh v1.2.0   # publica, preguntando antes
+PUSH=true YES=1 ./build.sh    # publica sin preguntar (scripts, CI)
 ```
+
+**Publicar no es el comportamiento por defecto.** Subir una imagen a un registry
+es irreversible en la práctica, así que hay que pedirlo con `PUSH=true` y
+confirmarlo. Sin terminal donde preguntar, el script aborta salvo que pases
+`YES=1`.
 
 Funciona igual con GHCR (`REGISTRY=ghcr.io`) y Docker Hub
 (`REGISTRY=docker.io`); haz `docker login` al registry antes.
