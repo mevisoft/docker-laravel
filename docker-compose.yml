@@ -24,9 +24,9 @@ services:
     <<: [*app, *needs-init]
     command: app
     ports:
-      - "${APP_PORT:-8000}:8000"
+      - "${APP_PORT:-3000}:3000"
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8000/up"]
+      test: ["CMD", "curl", "-fsS", "http://localhost:3000/up"]
       interval: 30s
       timeout: 5s
       retries: 3

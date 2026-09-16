@@ -27,7 +27,8 @@
 - Octane y los workers corren como el usuario `app` (uid 1000). Solo `init` se eleva a root.
 - Sin Horizon, sin Redis, sin base de datos en el compose, sin TLS, sin CI. Están fuera de alcance.
 - Sin frameworks de test. Los tests son scripts bash con `assert_eq`.
-- El puerto interno de Octane es siempre `8000`.
+- El puerto interno es siempre `8000`. **(Obsoleto: hoy es `3000` y lo sirve
+  FrankenPHP, no Octane. Ver la nota de cabecera y el spec.)**
 - Los mensajes de commit terminan con las dos líneas de atribución mostradas en cada paso de commit.
 
 ---

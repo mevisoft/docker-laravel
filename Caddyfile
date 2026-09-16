@@ -1,24 +1,28 @@
 {
-    admin {$CADDY_ADMIN:off}
-    auto_https off
-    {$CADDY_GLOBAL_OPTIONS}
+	admin {$CADDY_ADMIN:off}
+	auto_https off
+	# Sin esto Caddy intenta escribir /config/caddy/autosave.json y falla con
+	# permission denied: el contenedor corre como app (uid 1000). Ese autoguardado
+	# solo sirve para recuperar config aplicada por la API admin, que esta off.
+	persist_config off
+	{$CADDY_GLOBAL_OPTIONS}
 
-    frankenphp {
-    {$FRANKENPHP_CONFIG}
-    }
+	frankenphp {
+		{$FRANKENPHP_CONFIG}
+	}
 }
 
 {$CADDY_EXTRA_CONFIG}
 
 {$SERVER_NAME::3000} {
-    root * {$SERVER_ROOT:/app/public}
-    encode zstd br gzip
+	root * {$SERVER_ROOT:/app/public}
+	encode zstd br gzip
 
-    request_body {
-        max_size {$CADDY_MAX_SIZE:16MB}
-    }
+	request_body {
+		max_size {$CADDY_MAX_SIZE:16MB}
+	}
 
-    php_server {
-        try_files {path} index.php
-    }
+	php_server {
+		try_files {path} index.php
+	}
 }

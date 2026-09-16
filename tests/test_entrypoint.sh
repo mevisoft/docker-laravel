@@ -161,17 +161,19 @@ echo "dispatch de roles:"
 : > "$STUB_LOG"
 env PATH="$PWD/tests/stubs:$PATH" APP_DIR="$WORK/app" \
     ./entrypoint.sh app >/dev/null 2>&1
-assert_eq "el rol app sirve con frankenphp y el Caddyfile de la imagen" \
-  "frankenphp run --config /etc/frankenphp/Caddyfile" \
-  "$(cat "$STUB_LOG")"
+grep -qx "frankenphp run --config /etc/frankenphp/Caddyfile" "$STUB_LOG"
+assert_eq "el rol app sirve con frankenphp y el Caddyfile de la imagen" "0" "$?"
+grep -qx "SERVER_NAME=:3000" "$STUB_LOG"
+assert_eq "el rol app exporta SERVER_NAME=:3000 por defecto" "0" "$?"
 grep -qi "octane" "$STUB_LOG"
 assert_eq "el rol app no arranca octane" "1" "$?"
 : > "$STUB_LOG"
 env PATH="$PWD/tests/stubs:$PATH" APP_DIR="$WORK/app" \
     ./entrypoint.sh app >/dev/null 2>&1
-assert_eq "SERVER_NAME cae a :8000 si no se define" ":8000" \
-  "$(env PATH="$PWD/tests/stubs:$PATH" APP_DIR="$WORK/app" \
-     bash -c 'ENTRYPOINT_SOURCED=1 . ./entrypoint.sh; echo "${SERVER_NAME:-:8000}"')"
+env PATH="$PWD/tests/stubs:$PATH" APP_DIR="$WORK/app" SERVER_NAME=":9999" \
+    ./entrypoint.sh app >/dev/null 2>&1
+grep -qx "SERVER_NAME=:9999" "$STUB_LOG"
+assert_eq "un SERVER_NAME del .env manda sobre el default" "0" "$?"
 
 for role in schedule queue; do
   : > "$STUB_LOG"

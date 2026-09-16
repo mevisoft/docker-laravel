@@ -22,7 +22,7 @@ Vite, si correr migraciones y si instalar en modo producción.
 | Re-deploy | `REDEPLOY_STRATEGY=update\|fresh` | El usuario decide entre arranque rápido y determinismo |
 | Infraestructura | Ninguna | SQLite por defecto; otras bases de datos se configuran por `.env` apuntando a un host externo |
 | Publicación | `build.sh` local | Sin dependencia de CI |
-| HTTP | Plano en 8000 tras proxy | TLS lo resuelve Nginx/Traefik/Cloudflare delante |
+| HTTP | Plano en 3000 tras proxy | TLS lo resuelve Nginx/Traefik/Cloudflare delante |
 | `.env` | Uno solo, montado read-only | Un único archivo que editar |
 | Organización | `entrypoint.sh` con `case $1` | El bootstrap cabe en un archivo; partirlo sería abstracción especulativa |
 
@@ -98,7 +98,7 @@ read-only en `/app/.env`.
 | `REDEPLOY_STRATEGY` | `update` | `fresh` añade `--delete` al rsync |
 | `BUILD_ASSETS` | `true` | Compila los assets. `npm ci` si hay `package-lock.json`, `npm install` si no |
 | `RUN_MIGRATIONS` | `false` | `php artisan migrate --force` |
-| `APP_PORT` | `8000` | Puerto publicado en el host |
+| `APP_PORT` | `3000` | Puerto publicado en el host |
 | `QUEUE_OPTS` | `--tries=3 --timeout=90` | Se pasa tal cual a `queue:work` |
 | `IMAGE` | `ghcr.io/USUARIO/laravel-deploy:latest` | Imagen que usan los cuatro servicios |
 
@@ -162,7 +162,7 @@ creados. Con `set -euo pipefail`, cualquier paso fallido corta el arranque.
 Los otros tres roles son una línea cada uno:
 
 ```sh
-app)      export SERVER_NAME="${SERVER_NAME:-:8000}"
+app)      export SERVER_NAME="${SERVER_NAME:-:3000}"
           exec frankenphp run --config /etc/frankenphp/Caddyfile ;;
 schedule) exec php artisan schedule:work ;;
 queue)    exec php artisan queue:work $QUEUE_OPTS ;;
@@ -183,7 +183,7 @@ Base `dunglas/frankenphp:php8.4`. Añade:
 - Usuario `app` (uid 1000), `WORKDIR /app`, `COPY entrypoint.sh`,
   `ENTRYPOINT ["/entrypoint.sh"]`, `USER app`.
 
-FrankenPHP y los workers corren como `app`, no como root. Como el puerto es 8000
+FrankenPHP y los workers corren como `app`, no como root. Como el puerto es 3000
 (>1024) no hace falta `setcap`. Solo `init` se eleva a root desde el compose.
 
 ## docker-compose.yml
@@ -192,7 +192,7 @@ Una ancla YAML con la base común (imagen, `env_file`, volúmenes) y cuatro
 servicios que cambian `command`:
 
 - `init`: `user: "0:0"`, `restart: "no"`.
-- `app`: publica `${APP_PORT:-8000}:8000`, `depends_on` con
+- `app`: publica `${APP_PORT:-3000}:3000`, `depends_on` con
   `condition: service_completed_successfully`, healthcheck sobre `/up` cada 30s,
   `restart: unless-stopped`.
 - `schedule` y `queue`: mismo `depends_on` y `restart`. `queue` es escalable con

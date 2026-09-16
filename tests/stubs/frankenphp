@@ -1,3 +1,6 @@
 #!/usr/bin/env bash
+# Registra tambien SERVER_NAME: es lo que decide el puerto en el Caddyfile,
+# asi que el test tiene que poder verlo, no solo ver el comando.
 echo "frankenphp $*" >> "$STUB_LOG"
+echo "SERVER_NAME=${SERVER_NAME:-}" >> "$STUB_LOG"
 exit 0
