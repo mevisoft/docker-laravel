@@ -28,6 +28,7 @@ RUN useradd -u 1000 -m -s /bin/bash app \
  && mkdir -p /app /data \
  && chown app:app /app /data
 
+COPY Caddyfile /etc/frankenphp/Caddyfile
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 

@@ -42,7 +42,7 @@ LaravelDockerDeploy/
 Cuatro servicios, la misma imagen, distinto `command`:
 
 ```
-init ──(service_completed_successfully)──┬── app       frankenphp php-server
+init ──(service_completed_successfully)──┬── app       frankenphp run
                                          ├── schedule  php artisan schedule:work
                                          └── queue     php artisan queue:work
 ```
@@ -162,7 +162,8 @@ creados. Con `set -euo pipefail`, cualquier paso fallido corta el arranque.
 Los otros tres roles son una línea cada uno:
 
 ```sh
-app)      exec frankenphp php-server --root public --listen :8000 --access-log ;;
+app)      export SERVER_NAME="${SERVER_NAME:-:8000}"
+          exec frankenphp run --config /etc/frankenphp/Caddyfile ;;
 schedule) exec php artisan schedule:work ;;
 queue)    exec php artisan queue:work $QUEUE_OPTS ;;
 ```
@@ -177,6 +178,8 @@ Base `dunglas/frankenphp:php8.4`. Añade:
   `pdo_pgsql`, `bcmath`, `intl`, `zip`, `gd`, `opcache`.
 - Node.js 22 LTS desde NodeSource, para Vite.
 - Composer 2 copiado desde `composer/composer:2-bin`.
+- El `Caddyfile` del repositorio copiado a `/etc/frankenphp/Caddyfile`: fuera
+  de los volúmenes, porque en `/app` lo borraría el `rsync` del `init`.
 - Usuario `app` (uid 1000), `WORKDIR /app`, `COPY entrypoint.sh`,
   `ENTRYPOINT ["/entrypoint.sh"]`, `USER app`.
 

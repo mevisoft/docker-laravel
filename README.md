@@ -50,6 +50,12 @@ externo: este compose no levanta bases de datos.
 FrankenPHP escucha HTTP plano en el puerto 8000. Pon Nginx, Traefik o Cloudflare
 delante para el TLS, y configura `TrustProxies` en tu aplicación.
 
+La configuración del servidor vive en el `Caddyfile` del repositorio, que se
+copia a `/etc/frankenphp/Caddyfile` dentro de la imagen: trae compresión
+(zstd/br/gzip), un límite de tamaño de petición ajustable con `CADDY_MAX_SIZE`
+y `auto_https off`, porque el TLS lo resuelve el proxy de delante. `SERVER_NAME`
+vale `:8000` por defecto; si lo cambias, ajusta también el puerto del compose.
+
 ## Publicar la imagen
 
 Configura `REGISTRY`, `IMAGE_NAME` y `TAG` en el `.env`, y:

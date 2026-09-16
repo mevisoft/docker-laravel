@@ -127,11 +127,17 @@ main() {
       ;;
     app)
       cd "$APP_DIR"
-      # FrankenPHP sirve Laravel directamente, sin Octane: php-server usa la
-      # directiva php_server de Caddy, que ya resuelve el front controller
-      # (try_files hacia public/index.php). Una peticion = un arranque de
-      # Laravel, como con FPM pero sin FPM.
-      exec frankenphp php-server --root public --listen :8000 --access-log
+      # FrankenPHP sirve Laravel directamente, sin Octane, con el Caddyfile
+      # que la imagen trae en /etc/frankenphp (no en /app: ahi lo borraria el
+      # rsync del init). El Caddyfile resuelve el front controller con
+      # php_server + try_files, y anade compresion y limite de tamano de
+      # peticion.
+      #
+      # SERVER_NAME por defecto a :8000 para que cuadren el puerto publicado
+      # del compose y el healthcheck. Se puede sobreescribir por .env, pero
+      # el Caddyfile trae auto_https off: el TLS lo pone el proxy de delante.
+      export SERVER_NAME="${SERVER_NAME:-:8000}"
+      exec frankenphp run --config /etc/frankenphp/Caddyfile
       ;;
     schedule)
       cd "$APP_DIR"
