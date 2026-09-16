@@ -96,24 +96,16 @@ grep "^chown" <<< "$LOG" | grep -q -- "$WORK/app/.env"
 assert_eq "chown no toca el .env montado" "1" "$?"
 grep "^chown" <<< "$LOG" | grep -q -- "$WORK/app/package-lock.json"
 assert_eq "chown si toca otros archivos de app" "0" "$?"
-grep -q "composer require laravel/octane" <<< "$LOG"
-assert_eq "octane ya declarado no lo reinstala" "1" "$?"
-
-echo "init (octane no declarado):"
+echo "init (sin GITHUB_PAT definida, repo publico):"
 : > "$STUB_LOG"
-env PATH="$PWD/tests/stubs:$PATH" STUB_OCTANE_SHOW_EXIT=1 \
-    APP_DIR="$WORK/app-octane" DATA_DIR="$WORK/data-octane" \
+env PATH="$PWD/tests/stubs:$PATH" \
+    APP_DIR="$WORK/app-nopat" DATA_DIR="$WORK/data-nopat" \
     GIT_REPO=acme/shop APP_KEY=base64:x APP_ENV=production \
     BUILD_ASSETS=false RUN_MIGRATIONS=false \
     ./entrypoint.sh init >/dev/null 2>&1
-assert_eq "init termina bien sin octane declarado" "0" "$?"
-LOG="$(cat "$STUB_LOG")"
-grep -q -- "composer require laravel/octane --no-interaction --update-no-dev --no-scripts" <<< "$LOG"
-assert_eq "octane ausente lo instala (produccion respeta no-dev, sin scripts de terceros)" "0" "$?"
-grep -q "artisan octane:install" <<< "$LOG"
-assert_eq "no corre octane:install (escribiria en el .env de solo lectura)" "1" "$?"
-grep -q "artisan package:discover" <<< "$LOG"
-assert_eq "corre package:discover a mano tras el require sin scripts" "0" "$?"
+assert_eq "init no muere por set -u sin GITHUB_PAT" "0" "$?"
+grep -q "composer config --global --auth" "$STUB_LOG"
+assert_eq "sin PAT no escribe credencial vacia en el auth.json" "1" "$?"
 
 echo "init (sin package-lock.json):"
 : > "$STUB_LOG"
@@ -166,10 +158,19 @@ if [ -n "$REPO_BACKUP" ]; then
 fi
 
 echo "dispatch de roles:"
-for role in app schedule queue; do
+: > "$STUB_LOG"
+env PATH="$PWD/tests/stubs:$PATH" APP_DIR="$WORK/app" \
+    ./entrypoint.sh app >/dev/null 2>&1
+assert_eq "el rol app sirve con frankenphp directamente" \
+  "frankenphp php-server --root public --listen :8000 --access-log" \
+  "$(cat "$STUB_LOG")"
+grep -qi "octane" "$STUB_LOG"
+assert_eq "el rol app no arranca octane" "1" "$?"
+
+for role in schedule queue; do
   : > "$STUB_LOG"
   env PATH="$PWD/tests/stubs:$PATH" APP_DIR="$WORK/app" \
-      OCTANE_WORKERS=4 OCTANE_MAX_REQUESTS=500 QUEUE_OPTS="--tries=3" \
+      QUEUE_OPTS="--tries=3" \
       ./entrypoint.sh "$role" >/dev/null 2>&1
   grep -q "php artisan" "$STUB_LOG"
   assert_eq "el rol $role lanza artisan" "0" "$?"

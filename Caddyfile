@@ -1,0 +1,24 @@
+{
+    admin {$CADDY_ADMIN:off}
+    auto_https off
+    {$CADDY_GLOBAL_OPTIONS}
+
+    frankenphp {
+    {$FRANKENPHP_CONFIG}
+    }
+}
+
+{$CADDY_EXTRA_CONFIG}
+
+{$SERVER_NAME::3002} {
+    root * {$SERVER_ROOT:/app/public}
+    encode zstd br gzip
+
+    request_body {
+        max_size {$CADDY_MAX_SIZE:16MB}
+    }
+
+    php_server {
+        try_files {path} index.php
+    }
+}

@@ -2,6 +2,13 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **NOTA (2026-09-15):** este plan se ejecutó y completó tal como está escrito,
+> con Octane. Después, por decisión del usuario, **se eliminó Octane**: el rol
+> `app` pasó a servir con `frankenphp php-server` directamente. Las referencias
+> a Octane, `INSTALL_OCTANE`, `OCTANE_WORKERS` y `OCTANE_MAX_REQUESTS` que
+> siguen más abajo describen el estado anterior y se conservan como registro de
+> lo ejecutado. El diseño vigente está en el spec.
+
 **Goal:** Construir una imagen Docker genérica que, al arrancar, clona un proyecto Laravel desde GitHub y levanta Octane, el planificador o un worker de colas según el rol que reciba.
 
 **Architecture:** Un `entrypoint.sh` con un `case` de cuatro roles (`init`, `app`, `schedule`, `queue`) más un default que ejecuta cualquier comando. El rol `init` clona a `/tmp/repo` y sincroniza a `/app` con `rsync`, de modo que `REDEPLOY_STRATEGY=fresh` sea literalmente `--delete`. Un `docker-compose.yml` usa la misma imagen cuatro veces cambiando solo `command`.

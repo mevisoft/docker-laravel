@@ -69,7 +69,13 @@ do_init() {
 
   cd "$APP_DIR"
 
-  composer config --global --auth github-oauth.github.com "$GITHUB_PAT"
+  # Da el token a Composer para dependencias privadas de GitHub declaradas en
+  # el composer.json del proyecto. Con ${GITHUB_PAT:-} y el guard de no-vacio:
+  # sin el, set -u mata el init en cuanto la variable no esta definida, y con
+  # un PAT vacio escribiriamos una credencial vacia en el auth.json.
+  if [ -n "${GITHUB_PAT:-}" ]; then
+    composer config --global --auth github-oauth.github.com "$GITHUB_PAT"
+  fi
 
   echo "==> composer (APP_ENV=${APP_ENV:-production})"
   if [ "${APP_ENV:-production}" = "production" ]; then
@@ -78,33 +84,6 @@ do_init() {
     composer install --no-interaction
   fi
 
-  # composer show mira lo INSTALADO, no lo declarado: tras un install --no-dev,
-  # un proyecto que solo tenga Octane en require-dev cuenta aqui como ausente y
-  # se le instala para produccion. Es el resultado correcto, pero no leas esta
-  # condicion como "el proyecto no lo declara".
-  if [ "${INSTALL_OCTANE:-true}" = "true" ] && ! composer show laravel/octane >/dev/null 2>&1; then
-    echo "==> instalando Octane (no esta instalado en el proyecto)"
-    # Sin octane:install a proposito: solo publica config/octane.php (la
-    # config por defecto del paquete ya se fusiona sola) y escribe
-    # OCTANE_SERVER en el .env, que el rol app no necesita porque ya pasa
-    # --server=frankenphp explicito a octane:start. Ademas el .env lo monta
-    # el host de solo lectura (lleva el PAT) y octane:install fallaria al
-    # intentar escribirlo.
-    #
-    # --no-scripts en las dos ramas: un post-update-cmd de terceros que
-    # invoque una dev-dependency ausente (por ejemplo Laravel Boost, que
-    # trae "@php artisan boost:update" atado a un require-dev) tumbaria
-    # este require y con el todo el init. composer install ya corrio antes
-    # con los scripts del proyecto intactos, asi que el proyecto ya esta
-    # configurado; lo unico que falta es que Octane quede registrado, y de
-    # eso se encarga el package:discover manual de abajo.
-    if [ "${APP_ENV:-production}" = "production" ]; then
-      composer require laravel/octane --no-interaction --update-no-dev --no-scripts --optimize-autoloader
-    else
-      composer require laravel/octane --no-interaction --no-scripts
-    fi
-    php artisan package:discover
-  fi
 
   if [ "${BUILD_ASSETS:-true}" = "true" ]; then
     echo "==> compilando assets"
@@ -148,10 +127,11 @@ main() {
       ;;
     app)
       cd "$APP_DIR"
-      exec php artisan octane:start --server=frankenphp \
-        --host=0.0.0.0 --port=8000 \
-        --workers="${OCTANE_WORKERS:-auto}" \
-        --max-requests="${OCTANE_MAX_REQUESTS:-500}"
+      # FrankenPHP sirve Laravel directamente, sin Octane: php-server usa la
+      # directiva php_server de Caddy, que ya resuelve el front controller
+      # (try_files hacia public/index.php). Una peticion = un arranque de
+      # Laravel, como con FPM pero sin FPM.
+      exec frankenphp php-server --root public --listen :8000 --access-log
       ;;
     schedule)
       cd "$APP_DIR"

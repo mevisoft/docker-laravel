@@ -1,11 +1,10 @@
 # Imagen genérica de deploy para Laravel
 
 Una sola imagen Docker que clona tu proyecto Laravel desde GitHub al arrancar y
-levanta Octane (FrankenPHP), el planificador y un worker de colas.
+lo sirve con FrankenPHP, más el planificador y un worker de colas.
 
 La imagen no contiene código de aplicación: sirve para cualquier proyecto
-Laravel. Si tu proyecto no trae `laravel/octane` instalado (la mayoría no lo
-trae de serie), `init` lo instala y lo configura por ti antes de arrancar.
+Laravel.
 
 ## Uso
 
@@ -16,7 +15,7 @@ echo "base64:$(openssl rand -base64 32)"   # pega el resultado en APP_KEY
 docker compose up -d
 ```
 
-Servicios: `init` (clona e instala, corre una vez), `app` (Octane en `APP_PORT`),
+Servicios: `init` (clona e instala, corre una vez), `app` (FrankenPHP en `APP_PORT`),
 `schedule` (`schedule:work`), `queue` (`queue:work`).
 
 Escalar workers: `docker compose up -d --scale queue=3`
@@ -33,7 +32,6 @@ Todas las variables están documentadas en `.env.example`. Las principales:
 | `BUILD_ASSETS` | `true` corre `npm ci && npm run build` |
 | `RUN_MIGRATIONS` | `true` corre `php artisan migrate --force` |
 | `APP_ENV` | `production` instala sin dev-dependencies y cachea config |
-| `INSTALL_OCTANE` | `true` instala `laravel/octane` si el proyecto no lo trae |
 
 **El `.env` lo leen Compose y Laravel a la vez:** sin comillas por defecto, y
 nunca `#` a mitad de línea. Un valor que contenga espacios (como `QUEUE_OPTS`)
@@ -49,7 +47,7 @@ externo: este compose no levanta bases de datos.
 
 ## HTTPS
 
-Octane escucha HTTP plano en el puerto 8000. Pon Nginx, Traefik o Cloudflare
+FrankenPHP escucha HTTP plano en el puerto 8000. Pon Nginx, Traefik o Cloudflare
 delante para el TLS, y configura `TrustProxies` en tu aplicación.
 
 ## Publicar la imagen

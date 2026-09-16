@@ -1,4 +1,4 @@
-# Imagen genérica de deploy para Laravel (FrankenPHP + Octane)
+# Imagen genérica de deploy para Laravel (FrankenPHP)
 
 Fecha: 2026-09-14
 Estado: aprobado, pendiente de plan de implementación
@@ -7,7 +7,7 @@ Estado: aprobado, pendiente de plan de implementación
 
 Una única imagen Docker, sin código de aplicación dentro, que al arrancar clona un
 proyecto Laravel desde GitHub, instala dependencias y levanta uno de tres procesos
-según el rol que se le pase: servidor Octane, planificador o worker de colas.
+según el rol que se le pase: servidor web, planificador o worker de colas.
 
 La misma imagen sirve para cualquier proyecto Laravel. Todo se configura por
 variables de entorno: repositorio, rama, token de acceso, si compilar assets con
@@ -42,7 +42,7 @@ LaravelDockerDeploy/
 Cuatro servicios, la misma imagen, distinto `command`:
 
 ```
-init ──(service_completed_successfully)──┬── app       php artisan octane:start
+init ──(service_completed_successfully)──┬── app       frankenphp php-server
                                          ├── schedule  php artisan schedule:work
                                          └── queue     php artisan queue:work
 ```
@@ -97,11 +97,8 @@ read-only en `/app/.env`.
 | `GITHUB_PAT` | vacío | Vacío = repositorio público |
 | `REDEPLOY_STRATEGY` | `update` | `fresh` añade `--delete` al rsync |
 | `BUILD_ASSETS` | `true` | Compila los assets. `npm ci` si hay `package-lock.json`, `npm install` si no |
-| `INSTALL_OCTANE` | `true` | Instala `laravel/octane` si el proyecto no lo declara |
 | `RUN_MIGRATIONS` | `false` | `php artisan migrate --force` |
 | `APP_PORT` | `8000` | Puerto publicado en el host |
-| `OCTANE_WORKERS` | `auto` | `--workers` de Octane |
-| `OCTANE_MAX_REQUESTS` | `500` | Recicla workers para acotar fugas de memoria |
 | `QUEUE_OPTS` | `--tries=3 --timeout=90` | Se pasa tal cual a `queue:work` |
 | `IMAGE` | `ghcr.io/USUARIO/laravel-deploy:latest` | Imagen que usan los cuatro servicios |
 
@@ -149,14 +146,7 @@ creados. Con `set -euo pipefail`, cualquier paso fallido corta el arranque.
    `storage/app/public` y `bootstrap/cache`.
 4. Si `DB_CONNECTION=sqlite`, `touch` del archivo en `$DB_DATABASE`.
 5. `composer install`, en modo producción o normal según `APP_ENV`.
-6. Si `INSTALL_OCTANE=true` y el proyecto no declara `laravel/octane`:
-   `composer require laravel/octane` y `php artisan octane:install --server=frankenphp`.
-   Ningún proyecto Laravel trae Octane de serie, así que sin este paso el rol
-   `app` muere con «There are no commands defined in the "octane" namespace».
-   Si el proyecto ya lo declara no se toca nada: puede tener una versión fijada
-   a propósito. Va antes de las cachés para que la configuración de Octane entre
-   en ellas.
-7. Si `BUILD_ASSETS=true`: `npm ci` cuando existe `package-lock.json`,
+6. Si `BUILD_ASSETS=true`: `npm ci` cuando existe `package-lock.json`,
    `npm install` cuando no, y después `npm run build`. `npm ci` exige un
    lockfile y aborta sin él, y el esqueleto oficial de Laravel no lo comitea.
    No se encadena `npm ci || npm install`: eso enmascararía un lockfile
@@ -172,8 +162,7 @@ creados. Con `set -euo pipefail`, cualquier paso fallido corta el arranque.
 Los otros tres roles son una línea cada uno:
 
 ```sh
-app)      exec php artisan octane:start --server=frankenphp --host=0.0.0.0 --port=8000 \
-            --workers="$OCTANE_WORKERS" --max-requests="$OCTANE_MAX_REQUESTS" ;;
+app)      exec frankenphp php-server --root public --listen :8000 --access-log ;;
 schedule) exec php artisan schedule:work ;;
 queue)    exec php artisan queue:work $QUEUE_OPTS ;;
 ```
@@ -184,14 +173,14 @@ Base `dunglas/frankenphp:php8.4`. Añade:
 
 - Paquetes del sistema: `git`, `rsync`, `curl`, `unzip`.
 - Extensiones PHP con `install-php-extensions` (incluido en la imagen base):
-  `pcntl` (requerido por Octane y los workers), `pdo_sqlite`, `pdo_mysql`,
+  `pcntl` (requerido por los workers), `pdo_sqlite`, `pdo_mysql`,
   `pdo_pgsql`, `bcmath`, `intl`, `zip`, `gd`, `opcache`.
 - Node.js 22 LTS desde NodeSource, para Vite.
 - Composer 2 copiado desde `composer/composer:2-bin`.
 - Usuario `app` (uid 1000), `WORKDIR /app`, `COPY entrypoint.sh`,
   `ENTRYPOINT ["/entrypoint.sh"]`, `USER app`.
 
-Octane y los workers corren como `app`, no como root. Como el puerto es 8000
+FrankenPHP y los workers corren como `app`, no como root. Como el puerto es 8000
 (>1024) no hace falta `setcap`. Solo `init` se eleva a root desde el compose.
 
 ## docker-compose.yml
