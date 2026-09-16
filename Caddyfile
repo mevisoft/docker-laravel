@@ -10,7 +10,7 @@
 
 {$CADDY_EXTRA_CONFIG}
 
-{$SERVER_NAME::3002} {
+{$SERVER_NAME::3000} {
     root * {$SERVER_ROOT:/app/public}
     encode zstd br gzip
 

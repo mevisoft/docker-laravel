@@ -133,10 +133,10 @@ main() {
       # php_server + try_files, y anade compresion y limite de tamano de
       # peticion.
       #
-      # SERVER_NAME por defecto a :8000 para que cuadren el puerto publicado
+      # SERVER_NAME por defecto a :3000 para que cuadren el puerto publicado
       # del compose y el healthcheck. Se puede sobreescribir por .env, pero
       # el Caddyfile trae auto_https off: el TLS lo pone el proxy de delante.
-      export SERVER_NAME="${SERVER_NAME:-:8000}"
+      export SERVER_NAME="${SERVER_NAME:-:3000}"
       exec frankenphp run --config /etc/frankenphp/Caddyfile
       ;;
     schedule)
