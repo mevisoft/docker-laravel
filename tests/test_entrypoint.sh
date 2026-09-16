@@ -84,8 +84,8 @@ grep -q "npm ci" <<< "$LOG"
 assert_eq "con package-lock.json usa npm ci" "0" "$?"
 grep -q "migrate --force" <<< "$LOG"
 assert_eq "corre migraciones" "0" "$?"
-grep -q "config:cache" <<< "$LOG"
-assert_eq "produccion cachea config" "0" "$?"
+grep -q "artisan optimize" <<< "$LOG"
+assert_eq "produccion cachea con optimize" "0" "$?"
 assert_eq "crea storage/framework/views" "0" \
   "$([ -d "$WORK/app/storage/framework/views" ] && echo 0 || echo 1)"
 assert_eq "crea el archivo sqlite" "0" \
@@ -121,6 +121,35 @@ assert_eq "sin package-lock.json usa npm install" "0" "$?"
 grep -q "npm ci" <<< "$LOG"
 assert_eq "sin package-lock.json no usa npm ci" "1" "$?"
 
+echo "init (gestor de paquetes segun el lockfile):"
+for caso in "pnpm-lock.yaml|pnpm install --frozen-lockfile|pnpm run build" \
+            "yarn.lock|yarn install --frozen-lockfile|yarn run build" \
+            "package-lock.json|npm ci|npm run build"; do
+  lock="${caso%%|*}"; resto="${caso#*|}"; inst="${resto%%|*}"; build="${resto##*|}"
+  dir="$WORK/pm-${lock%%.*}"
+  : > "$STUB_LOG"
+  mkdir -p "$dir" && touch "$dir/$lock"
+  env PATH="$PWD/tests/stubs:$PATH" \
+      APP_DIR="$dir" DATA_DIR="$WORK/pm-data" \
+      GIT_REPO=acme/shop APP_KEY=base64:x APP_ENV=production \
+      BUILD_ASSETS=true RUN_MIGRATIONS=false \
+      ./entrypoint.sh init >/dev/null 2>&1
+  LOG="$(cat "$STUB_LOG")"
+  grep -qx "$inst" <<< "$LOG"
+  assert_eq "con $lock instala con: $inst" "0" "$?"
+  grep -qx "$build" <<< "$LOG"
+  assert_eq "con $lock compila con: $build" "0" "$?"
+done
+: > "$STUB_LOG"
+mkdir -p "$WORK/pm-berry" && touch "$WORK/pm-berry/yarn.lock" "$WORK/pm-berry/.yarnrc.yml"
+env PATH="$PWD/tests/stubs:$PATH" \
+    APP_DIR="$WORK/pm-berry" DATA_DIR="$WORK/pm-data" \
+    GIT_REPO=acme/shop APP_KEY=base64:x APP_ENV=production \
+    BUILD_ASSETS=true RUN_MIGRATIONS=false \
+    ./entrypoint.sh init >/dev/null 2>&1
+grep -qx "yarn install --immutable" "$STUB_LOG"
+assert_eq "yarn berry (.yarnrc.yml) usa --immutable, no --frozen-lockfile" "0" "$?"
+
 echo "init (local, update):"
 : > "$STUB_LOG"
 env PATH="$PWD/tests/stubs:$PATH" \
@@ -133,7 +162,7 @@ grep -q -- "--delete" <<< "$LOG"
 assert_eq "update no borra" "1" "$?"
 grep -q "npm run build" <<< "$LOG"
 assert_eq "no compila si BUILD_ASSETS=false" "1" "$?"
-grep -q "config:cache" <<< "$LOG"
+grep -q "artisan optimize" <<< "$LOG"
 assert_eq "local no cachea" "1" "$?"
 
 echo "init (git clone falla, no debe dejar el PAT en /tmp/repo):"

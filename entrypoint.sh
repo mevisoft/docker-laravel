@@ -87,16 +87,30 @@ do_init() {
 
   if [ "${BUILD_ASSETS:-true}" = "true" ]; then
     echo "==> compilando assets"
-    # El esqueleto oficial de laravel/laravel no comitea package-lock.json,
-    # y npm ci exige que exista. Sin este condicional, init moriria en
-    # cualquier repo Laravel que no comitee su lockfile. No lo simplifiques
-    # de vuelta a un npm ci unico.
-    if [ -f package-lock.json ]; then
+    # El gestor lo decide el lockfile del proyecto: un Laravel con pnpm o yarn
+    # es tan valido como uno con npm, y la imagen dice servir para cualquiera.
+    # Ojo con npm ci: exige package-lock.json y aborta sin el, y el esqueleto
+    # oficial de laravel/laravel no lo comitea. Por eso el ultimo caso es
+    # npm install y no npm ci.
+    if [ -f pnpm-lock.yaml ]; then
+      pnpm install --frozen-lockfile
+      pnpm run build
+    elif [ -f yarn.lock ]; then
+      # yarn 2+ (berry, reconocible por .yarnrc.yml) renombro --frozen-lockfile
+      # a --immutable; yarn classic solo entiende el viejo.
+      if [ -f .yarnrc.yml ]; then
+        yarn install --immutable
+      else
+        yarn install --frozen-lockfile
+      fi
+      yarn run build
+    elif [ -f package-lock.json ]; then
       npm ci
+      npm run build
     else
       npm install
+      npm run build
     fi
-    npm run build
   fi
 
   php artisan storage:link || true
@@ -108,9 +122,9 @@ do_init() {
 
   if [ "${APP_ENV:-production}" = "production" ]; then
     echo "==> cacheando configuracion"
-    php artisan config:cache
-    php artisan route:cache
-    php artisan view:cache
+    # optimize hace config:cache, route:cache, view:cache y ademas event:cache,
+    # asi que llamar a los tres por separado era hacer menos en mas lineas.
+    php artisan optimize
   fi
 
   # El .env lo monta el host como :ro (lleva el PAT), asi que hay que

@@ -29,7 +29,7 @@ Todas las variables están documentadas en `.env.example`. Las principales:
 | `GIT_REPO` | `owner/repo` o URL completa. Obligatoria |
 | `GITHUB_PAT` | Solo para repositorios privados |
 | `REDEPLOY_STRATEGY` | `update` (rápido) o `fresh` (borra y reinstala) |
-| `BUILD_ASSETS` | `true` corre `npm ci && npm run build` |
+| `BUILD_ASSETS` | `true` compila los assets con el gestor que indique tu lockfile (pnpm, yarn o npm) |
 | `RUN_MIGRATIONS` | `true` corre `php artisan migrate --force` |
 | `APP_ENV` | `production` instala sin dev-dependencies y cachea config |
 

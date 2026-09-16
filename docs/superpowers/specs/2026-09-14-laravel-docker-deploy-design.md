@@ -96,7 +96,7 @@ read-only en `/app/.env`.
 | `GIT_BRANCH` | `main` | Rama o tag |
 | `GITHUB_PAT` | vacío | Vacío = repositorio público |
 | `REDEPLOY_STRATEGY` | `update` | `fresh` añade `--delete` al rsync |
-| `BUILD_ASSETS` | `true` | Compila los assets. `npm ci` si hay `package-lock.json`, `npm install` si no |
+| `BUILD_ASSETS` | `true` | Compila los assets con el gestor que indique el lockfile: `pnpm`, `yarn` o `npm` |
 | `RUN_MIGRATIONS` | `false` | `php artisan migrate --force` |
 | `APP_PORT` | `3000` | Puerto publicado en el host |
 | `QUEUE_OPTS` | `--tries=3 --timeout=90` | Se pasa tal cual a `queue:work` |
@@ -153,7 +153,8 @@ creados. Con `set -euo pipefail`, cualquier paso fallido corta el arranque.
    desincronizado y lo reescribiría en silencio.
 8. `php artisan storage:link` (tolerante a que ya exista).
 9. Si `RUN_MIGRATIONS=true`: `php artisan migrate --force`.
-10. Si `APP_ENV=production`: `config:cache`, `route:cache`, `view:cache`.
+10. Si `APP_ENV=production`: `php artisan optimize`, que hace `config:cache`,
+    `route:cache`, `view:cache` y además `event:cache`.
 11. `chown app:app` sobre `/app` y `/data`, **podando `/app/.env`**: ese archivo
     lo monta el host como `:ro` porque lleva el PAT, y un `chown -R` sobre él
     aborta con «Read-only file system». Se poda con `find -prune`, no se tolera
