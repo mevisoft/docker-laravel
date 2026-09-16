@@ -1,7 +1,19 @@
 FROM dunglas/frankenphp:php8.4
 
 RUN install-php-extensions \
-      pcntl pdo_sqlite pdo_mysql pdo_pgsql bcmath intl zip gd opcache
+    pdo_mysql \
+    pdo_pgsql \
+    pdo_sqlite \
+    pgsql \
+    intl \
+    zip \
+    bcmath \
+    soap \
+    pcntl \
+    redis \
+    gd \
+    opcache \
+    exif
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \

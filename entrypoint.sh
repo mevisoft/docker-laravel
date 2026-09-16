@@ -69,6 +69,8 @@ do_init() {
 
   cd "$APP_DIR"
 
+  composer config --global --auth github-oauth.github.com "$GITHUB_PAT"
+
   echo "==> composer (APP_ENV=${APP_ENV:-production})"
   if [ "${APP_ENV:-production}" = "production" ]; then
     composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist
