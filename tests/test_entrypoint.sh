@@ -121,6 +121,31 @@ assert_eq "sin package-lock.json usa npm install" "0" "$?"
 grep -q "npm ci" <<< "$LOG"
 assert_eq "sin package-lock.json no usa npm ci" "1" "$?"
 
+echo "init (credenciales de GitHub Packages para el gestor de assets):"
+: > "$STUB_LOG"
+NPMHOME="$WORK/npmhome"
+mkdir -p "$NPMHOME" "$WORK/app-npmrc"
+env PATH="$PWD/tests/stubs:$PATH" HOME="$NPMHOME" \
+    APP_DIR="$WORK/app-npmrc" DATA_DIR="$WORK/data-npmrc" \
+    GIT_REPO=acme/shop GITHUB_PAT=ghp_secreto APP_KEY=base64:x APP_ENV=production \
+    BUILD_ASSETS=true RUN_MIGRATIONS=false \
+    ./entrypoint.sh init >/dev/null 2>&1
+grep -q "//npm.pkg.github.com/:_authToken=ghp_secreto" "$NPMHOME/.npmrc" 2>/dev/null
+assert_eq "el PAT llega al .npmrc del HOME para paquetes privados" "0" "$?"
+assert_eq "el PAT NO acaba en el volumen de la app" "" \
+  "$(grep -rl ghp_secreto "$WORK/app-npmrc" 2>/dev/null)"
+
+: > "$STUB_LOG"
+NPMHOME2="$WORK/npmhome2"
+mkdir -p "$NPMHOME2" "$WORK/app-nonpmrc"
+env PATH="$PWD/tests/stubs:$PATH" HOME="$NPMHOME2" \
+    APP_DIR="$WORK/app-nonpmrc" DATA_DIR="$WORK/data-nonpmrc" \
+    GIT_REPO=acme/shop APP_KEY=base64:x APP_ENV=production \
+    BUILD_ASSETS=true RUN_MIGRATIONS=false \
+    ./entrypoint.sh init >/dev/null 2>&1
+assert_eq "sin PAT no escribe .npmrc" "1" \
+  "$([ -f "$NPMHOME2/.npmrc" ] && echo 0 || echo 1)"
+
 echo "init (gestor de paquetes segun el lockfile):"
 for caso in "pnpm-lock.yaml|pnpm install --frozen-lockfile|pnpm run build" \
             "yarn.lock|yarn install --frozen-lockfile|yarn run build" \

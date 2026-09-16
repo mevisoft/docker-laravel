@@ -87,6 +87,17 @@ do_init() {
 
   if [ "${BUILD_ASSETS:-true}" = "true" ]; then
     echo "==> compilando assets"
+    # Credenciales para paquetes privados de GitHub Packages (@scope/x con
+    # registry npm.pkg.github.com). Sin esto el install muere con 401.
+    #
+    # Va en $HOME/.npmrc (init corre como root, o sea /root) y NUNCA en
+    # /app/.npmrc: /app es un volumen y ahi el token persistiria, que es justo
+    # lo que el diseno prohibe. El contenedor init es efimero, asi que el
+    # fichero se va con el. npm, pnpm y yarn classic leen todos ~/.npmrc.
+    if [ -n "${GITHUB_PAT:-}" ]; then
+      printf '//npm.pkg.github.com/:_authToken=%s\n' "$GITHUB_PAT" >> "${HOME:-/root}/.npmrc"
+    fi
+
     # El gestor lo decide el lockfile del proyecto: un Laravel con pnpm o yarn
     # es tan valido como uno con npm, y la imagen dice servir para cualquiera.
     # Ojo con npm ci: exige package-lock.json y aborta sin el, y el esqueleto
