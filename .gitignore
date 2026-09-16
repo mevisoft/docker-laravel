@@ -1,3 +1,4 @@
 .env
 .env.smoke
 .DS_Store
+.idea/
