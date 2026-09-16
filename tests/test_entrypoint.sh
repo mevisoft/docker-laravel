@@ -132,6 +132,8 @@ env PATH="$PWD/tests/stubs:$PATH" HOME="$NPMHOME" \
     ./entrypoint.sh init >/dev/null 2>&1
 grep -q "//npm.pkg.github.com/:_authToken=ghp_secreto" "$NPMHOME/.npmrc" 2>/dev/null
 assert_eq "el PAT llega al .npmrc del HOME para paquetes privados" "0" "$?"
+grep -q "npmAuthToken: \"ghp_secreto\"" "$NPMHOME/.yarnrc.yml" 2>/dev/null
+assert_eq "el PAT llega tambien al .yarnrc.yml (yarn 2+ ignora .npmrc)" "0" "$?"
 assert_eq "el PAT NO acaba en el volumen de la app" "" \
   "$(grep -rl ghp_secreto "$WORK/app-npmrc" 2>/dev/null)"
 
@@ -145,6 +147,8 @@ env PATH="$PWD/tests/stubs:$PATH" HOME="$NPMHOME2" \
     ./entrypoint.sh init >/dev/null 2>&1
 assert_eq "sin PAT no escribe .npmrc" "1" \
   "$([ -f "$NPMHOME2/.npmrc" ] && echo 0 || echo 1)"
+assert_eq "sin PAT no escribe .yarnrc.yml" "1" \
+  "$([ -f "$NPMHOME2/.yarnrc.yml" ] && echo 0 || echo 1)"
 
 echo "init (gestor de paquetes segun el lockfile):"
 for caso in "pnpm-lock.yaml|pnpm install --frozen-lockfile|pnpm run build" \

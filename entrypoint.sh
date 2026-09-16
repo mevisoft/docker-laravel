@@ -96,6 +96,11 @@ do_init() {
     # fichero se va con el. npm, pnpm y yarn classic leen todos ~/.npmrc.
     if [ -n "${GITHUB_PAT:-}" ]; then
       printf '//npm.pkg.github.com/:_authToken=%s\n' "$GITHUB_PAT" >> "${HOME:-/root}/.npmrc"
+      # yarn 2+ (berry) ignora ~/.npmrc: su equivalente es ~/.yarnrc.yml. Va en
+      # el HOME por el mismo motivo, nunca en el .yarnrc.yml del proyecto, que
+      # vive en el volumen.
+      printf 'npmRegistries:\n  "//npm.pkg.github.com":\n    npmAuthToken: "%s"\n' \
+        "$GITHUB_PAT" > "${HOME:-/root}/.yarnrc.yml"
     fi
 
     # El gestor lo decide el lockfile del proyecto: un Laravel con pnpm o yarn

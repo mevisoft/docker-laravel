@@ -145,12 +145,26 @@ creados. Con `set -euo pipefail`, cualquier paso fallido corta el arranque.
 3. Crear `storage/framework/{cache/data,sessions,views}`, `storage/logs`,
    `storage/app/public` y `bootstrap/cache`.
 4. Si `DB_CONNECTION=sqlite`, `touch` del archivo en `$DB_DATABASE`.
-5. `composer install`, en modo producción o normal según `APP_ENV`.
-6. Si `BUILD_ASSETS=true`: `npm ci` cuando existe `package-lock.json`,
-   `npm install` cuando no, y después `npm run build`. `npm ci` exige un
+5. `composer install`, en modo producción o normal según `APP_ENV`. Si hay
+   `GITHUB_PAT`, antes se configura `github-oauth` global de Composer para que
+   pueda resolver dependencias privadas de GitHub.
+6. Si hay `GITHUB_PAT`, se escriben las credenciales de GitHub Packages para el
+   gestor de assets: `//npm.pkg.github.com/:_authToken=…` en `$HOME/.npmrc`
+   (npm, pnpm y yarn classic) y un `npmRegistries` equivalente en
+   `$HOME/.yarnrc.yml` (yarn 2+, que ignora `.npmrc`). Sin esto, un proyecto con
+   dependencias privadas muere con `401 Unauthorized`.
+   Ambos ficheros van al `$HOME` del `init` —que corre como root, o sea `/root`—
+   y nunca a `/app`: ese es un volumen y ahí el token persistiría, que es
+   exactamente lo que el diseño prohíbe. El contenedor `init` es efímero, así
+   que se van con él.
+7. Si `BUILD_ASSETS=true`: el gestor lo decide el lockfile del proyecto —
+   `pnpm-lock.yaml` → `pnpm`, `yarn.lock` → `yarn` (con `--immutable` si hay
+   `.yarnrc.yml`, que delata yarn 2+), `package-lock.json` → `npm ci`, y sin
+   ningún lockfile → `npm install`. Después, `run build`. `npm ci` exige un
    lockfile y aborta sin él, y el esqueleto oficial de Laravel no lo comitea.
    No se encadena `npm ci || npm install`: eso enmascararía un lockfile
-   desincronizado y lo reescribiría en silencio.
+   desincronizado y lo reescribiría en silencio. `pnpm` y `yarn` llegan por
+   corepack, que resuelve la versión respetando el campo `packageManager`.
 8. `php artisan storage:link` (tolerante a que ya exista).
 9. Si `RUN_MIGRATIONS=true`: `php artisan migrate --force`.
 10. Si `APP_ENV=production`: `php artisan optimize`, que hace `config:cache`,
