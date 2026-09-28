@@ -54,6 +54,19 @@ do_init() {
   trap 'rm -rf /tmp/repo' EXIT
   git clone --depth 1 --branch "${GIT_BRANCH:-main}" "$url" "$tmp"
 
+  # BUILD_ASSETS=auto compara resources/js, vite.config.ts y package.json
+  # contra el despliegue anterior (APP_DIR es un volumen persistente) antes
+  # de que el rsync lo sobreescriba. Sin deploy previo se asume que hay cambios.
+  assets_changed=true
+  if [ "${BUILD_ASSETS:-true}" = "auto" ]; then
+    if [ -d "$APP_DIR/resources/js" ] \
+      && diff -rq "$APP_DIR/resources/js" "$tmp/resources/js" >/dev/null 2>&1 \
+      && diff -q "$APP_DIR/vite.config.ts" "$tmp/vite.config.ts" >/dev/null 2>&1 \
+      && diff -q "$APP_DIR/package.json" "$tmp/package.json" >/dev/null 2>&1; then
+      assets_changed=false
+    fi
+  fi
+
   echo "==> sincronizando a ${APP_DIR}"
   mkdir -p "$APP_DIR"
   rsync -a $flags --exclude=/.git --exclude=/storage --exclude=/.env "$tmp/" "$APP_DIR/"
@@ -85,7 +98,7 @@ do_init() {
   fi
 
 
-  if [ "${BUILD_ASSETS:-true}" = "true" ]; then
+  if [ "${BUILD_ASSETS:-true}" = "true" ] || { [ "${BUILD_ASSETS:-true}" = "auto" ] && [ "$assets_changed" = "true" ]; }; then
     echo "==> compilando assets"
     # Credenciales para paquetes privados de GitHub Packages (@scope/x con
     # registry npm.pkg.github.com). Sin esto el install muere con 401.
@@ -172,6 +185,10 @@ main() {
     schedule)
       cd "$APP_DIR"
       exec php artisan schedule:work
+      ;;
+    horizon)
+      cd "$APP_DIR"
+      exec php artisan horizon
       ;;
     queue)
       cd "$APP_DIR"
