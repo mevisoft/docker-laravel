@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 echo "git $*" >> "$STUB_LOG"
-mkdir -p /tmp/repo/.git
-echo "url = https://x-access-token:ghp_xxx@github.com/acme/shop.git" > /tmp/repo/.git/config
-exit 1
+# como el git real: un fetch deja la URL (con el PAT) en .git/FETCH_HEAD
+if [[ "$*" == *fetch* ]]; then
+  mkdir -p "$APP_DIR/.git"
+  echo "branch 'main' of https://x-access-token:ghp_xxx@github.com/acme/shop" > "$APP_DIR/.git/FETCH_HEAD"
+  exit 1
+fi
+exit 0

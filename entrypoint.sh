@@ -17,15 +17,6 @@ repo_url() {
   fi
 }
 
-rsync_flags() {
-  case "${1:-update}" in
-    fresh) printf '%s\n' "--delete" ;;
-    # update tambien borra lo eliminado del repo, pero protege lo generado en
-    # el servidor (no viene en el clon) para no reinstalar ni recompilar todo.
-    *)     printf '%s\n' "--delete --exclude=/vendor --exclude=/node_modules --exclude=/public/build --exclude=/public/storage --exclude=/bootstrap/cache" ;;
-  esac
-}
-
 # Huella de todo lo que puede cambiar el resultado del build: resources entero
 # (js, css y vistas Blade que Tailwind escanea), configs de vite/tailwind/postcss
 # y package.json con sus lockfiles. cksum porque existe en cualquier sistema.
@@ -66,26 +57,17 @@ fix_perms() {
 do_init() {
   validate_env
 
-  local url flags tmp
+  local url branch clean
   url="$(repo_url "$GIT_REPO" "${GITHUB_PAT:-}")"
-  flags="$(rsync_flags "${REDEPLOY_STRATEGY:-update}")"
-  tmp=/tmp/repo
+  branch="${GIT_BRANCH:-main}"
+  # fresh ademas borra lo ignorado (vendor, node_modules, public/build y con
+  # ellos la marca de build); update lo conserva. En ambos, .env (montado :ro)
+  # y storage (volumen) quedan fuera.
+  clean="-fd"
+  [ "${REDEPLOY_STRATEGY:-update}" = "fresh" ] && clean="-fdx"
 
-  echo "==> clonando ${GIT_REPO} (${GIT_BRANCH:-main})"
-  rm -rf "$tmp"
-  trap 'rm -rf /tmp/repo; fix_perms || true' EXIT
-  git clone --depth 1 --branch "${GIT_BRANCH:-main}" "$url" "$tmp"
-
-  # BUILD_ASSETS=auto compara la huella de las fuentes del build con la que se
-  # guardo tras el ultimo build EXITOSO, en public/build/.assets-hash. Asi un
-  # build fallido se reintenta, y un rsync --delete que se lleve public/build
-  # se lleva tambien la marca y fuerza la recompilacion.
-  marker="$APP_DIR/public/build/.assets-hash"
-  new_hash="$(assets_hash "$tmp")"
-  assets_changed=true
-  if [ "${BUILD_ASSETS:-true}" = "auto" ] && [ "$(cat "$marker" 2>/dev/null)" = "$new_hash" ]; then
-    assets_changed=false
-  fi
+  # FETCH_HEAD apunta a la URL con el PAT, y APP_DIR es un volumen persistente.
+  trap 'rm -f "$APP_DIR/.git/FETCH_HEAD"; fix_perms || true' EXIT
 
   # Sin esto los workers siguen con el codigo viejo y los usuarios ven codigo
   # nuevo con vendor viejo mientras dura el despliegue. || true: en el primer
@@ -94,10 +76,30 @@ do_init() {
     (cd "$APP_DIR" && php artisan down --retry=60) || true
   fi
 
-  echo "==> sincronizando a ${APP_DIR}"
+  # /app es un volumen con .env y storage montados, asi que no se puede
+  # clonar en ella: se inicializa el repo en sitio y se trae solo el commit
+  # de la rama. reset --hard (no pull) para no tener merges ni conflictos, y
+  # borra lo que el repo elimino. safe.directory: el .git lo deja chown como
+  # app y este init corre como root, que git trata como propietario ajeno.
+  echo "==> sincronizando ${GIT_REPO} (${branch}) en ${APP_DIR}"
   mkdir -p "$APP_DIR"
-  rsync -a $flags --exclude=/.git --exclude=/storage --exclude=/.env "$tmp/" "$APP_DIR/"
-  rm -rf "$tmp"
+  g() { git -C "$APP_DIR" -c safe.directory="$APP_DIR" "$@"; }
+  [ -d "$APP_DIR/.git" ] || g init -q
+  g fetch --depth 1 "$url" "$branch"
+  g reset -q --hard FETCH_HEAD
+  g clean -q $clean -e /.env -e /storage
+  echo "==> commit $(g rev-parse --short HEAD)"
+
+  # BUILD_ASSETS=auto compara la huella de las fuentes del build con la que se
+  # guardo tras el ultimo build EXITOSO, en public/build/.assets-hash. Asi un
+  # build fallido se reintenta, y un fresh que se lleve public/build se lleva
+  # tambien la marca y fuerza la recompilacion.
+  marker="$APP_DIR/public/build/.assets-hash"
+  new_hash="$(assets_hash "$APP_DIR")"
+  assets_changed=true
+  if [ "${BUILD_ASSETS:-true}" = "auto" ] && [ "$(cat "$marker" 2>/dev/null)" = "$new_hash" ]; then
+    assets_changed=false
+  fi
 
   mkdir -p "$APP_DIR"/storage/framework/{cache/data,sessions,views} \
            "$APP_DIR"/storage/logs "$APP_DIR"/storage/app/public \

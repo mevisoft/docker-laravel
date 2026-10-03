@@ -5,7 +5,6 @@ x-app: &app
     - app_code:/app
     - app_storage:/app/storage
     - app_data:/data
-    - ./${ENV_FILE:-.env}:/app/.env:ro
   restart: unless-stopped
 
 x-needs-init: &needs-init

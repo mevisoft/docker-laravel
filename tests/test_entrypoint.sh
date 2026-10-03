@@ -36,11 +36,6 @@ assert_eq "host no-github se respeta tal cual" \
   "https://gitlab.com/acme/shop.git" \
   "$(repo_url https://gitlab.com/acme/shop.git)"
 
-echo "rsync_flags:"
-assert_eq "fresh borra" "--delete" "$(rsync_flags fresh)"
-assert_eq "update borra y protege lo generado" "0" "$(rsync_flags update | grep -qE -- '--delete.*--exclude=/vendor.*--exclude=/public/build'; echo $?)"
-assert_eq "default es update" "$(rsync_flags update)" "$(rsync_flags)"
-
 echo "validate_env:"
 ( GIT_REPO="" APP_KEY=base64:x validate_env ) 2>/dev/null
 assert_eq "sin GIT_REPO falla" "1" "$?"
@@ -66,16 +61,18 @@ env PATH="$PWD/tests/stubs:$PATH" \
 assert_eq "init termina bien" "0" "$?"
 
 LOG="$(cat "$STUB_LOG")"
-grep -q -- "--branch main" <<< "$LOG"
+grep -q -- "fetch --depth 1 .* main" <<< "$LOG"
 assert_eq "clona la rama configurada" "0" "$?"
 grep -q "x-access-token:ghp_xxx" <<< "$LOG"
 assert_eq "el clone usa el PAT" "0" "$?"
-grep -q -- "rsync .*--delete" <<< "$LOG"
-assert_eq "fresh pasa --delete a rsync" "0" "$?"
-grep -q -- "--exclude=/.git" <<< "$LOG"
-assert_eq "rsync excluye .git" "0" "$?"
-grep -q -- "--exclude=/storage" <<< "$LOG"
-assert_eq "rsync excluye storage" "0" "$?"
+grep -q -- "clean -q -fdx -e /.env -e /storage" <<< "$LOG"
+assert_eq "fresh limpia tambien lo ignorado, sin tocar .env ni storage" "0" "$?"
+grep -q -- "reset -q --hard FETCH_HEAD" <<< "$LOG"
+assert_eq "sincroniza con reset --hard, no con pull" "0" "$?"
+grep -q -- "safe.directory=$WORK/app" <<< "$LOG"
+assert_eq "git acepta el .git que pertenece a app" "0" "$?"
+grep -q "rsync" <<< "$LOG"
+assert_eq "ya no se usa rsync" "1" "$?"
 grep -q -- "composer install --no-dev" <<< "$LOG"
 assert_eq "produccion instala sin dev" "0" "$?"
 grep -q "npm run build" <<< "$LOG"
@@ -187,10 +184,8 @@ env PATH="$PWD/tests/stubs:$PATH" \
     REDEPLOY_STRATEGY=update BUILD_ASSETS=false RUN_MIGRATIONS=false \
     ./entrypoint.sh init >/dev/null 2>&1
 LOG="$(cat "$STUB_LOG")"
-grep -q -- "--delete" <<< "$LOG"
-assert_eq "update borra lo eliminado del repo" "0" "$?"
-grep -q -- "--exclude=/vendor" <<< "$LOG"
-assert_eq "update protege vendor" "0" "$?"
+grep -q -- "clean -q -fd -e /.env -e /storage" <<< "$LOG"
+assert_eq "update borra lo eliminado pero conserva lo ignorado (vendor)" "0" "$?"
 grep -q "npm run build" <<< "$LOG"
 assert_eq "no compila si BUILD_ASSETS=false" "1" "$?"
 grep -q "artisan optimize" <<< "$LOG"
@@ -232,26 +227,16 @@ assert_eq "init falla si composer falla" "1" "$?"
 grep "^chown" "$STUB_LOG" | grep -q -- "$FAILC/app/x"
 assert_eq "chown corre aunque el init falle" "0" "$?"
 
-echo "init (git clone falla, no debe dejar el PAT en /tmp/repo):"
-REPO_BACKUP=""
-if [ -e /tmp/repo ]; then
-  REPO_BACKUP="$(mktemp -d)"
-  mv /tmp/repo "$REPO_BACKUP/repo"
-fi
+echo "init (git fetch falla, no debe dejar el PAT en el volumen):"
 : > "$STUB_LOG"
 env PATH="$PWD/tests/stubs-failgit:$PWD/tests/stubs:$PATH" \
     APP_DIR="$WORK/app3" DATA_DIR="$WORK/data3" \
     GIT_REPO=acme/shop GIT_BRANCH=main GITHUB_PAT=ghp_xxx \
     APP_KEY=base64:x \
     ./entrypoint.sh init >/dev/null 2>&1
-assert_eq "init termina mal si git clone falla" "1" "$?"
-assert_eq "/tmp/repo no sobrevive a un clone fallido" "1" \
-  "$([ -e /tmp/repo ] && echo 0 || echo 1)"
-if [ -n "$REPO_BACKUP" ]; then
-  rm -rf /tmp/repo
-  mv "$REPO_BACKUP/repo" /tmp/repo
-  rm -rf "$REPO_BACKUP"
-fi
+assert_eq "init termina mal si git fetch falla" "1" "$?"
+assert_eq "el PAT no queda en .git" "" \
+  "$(grep -rl ghp_xxx "$WORK/app3" 2>/dev/null)"
 
 echo "dispatch de roles:"
 : > "$STUB_LOG"
