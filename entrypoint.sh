@@ -52,6 +52,17 @@ validate_env() {
 APP_DIR="${APP_DIR:-/app}"
 DATA_DIR="${DATA_DIR:-/data}"
 
+# Init corre como root: todo lo que crea (rsync, vendor, logs de migrate...) es
+# root y el app (usuario app) no podria escribirlo. Se llama desde el trap EXIT
+# y no al final del init, para que un init fallido a medias tampoco deje
+# ficheros root en los volumenes.
+# El .env lo monta el host como :ro (lleva el PAT), asi que hay que saltarselo:
+# un chown -R sobre /app moriria con "Read-only file system".
+fix_perms() {
+  find "$APP_DIR" -path "$APP_DIR/.env" -prune -o -print0 2>/dev/null | xargs -0 -r chown app:app
+  chown -R app:app "$DATA_DIR"
+}
+
 do_init() {
   validate_env
 
@@ -62,7 +73,7 @@ do_init() {
 
   echo "==> clonando ${GIT_REPO} (${GIT_BRANCH:-main})"
   rm -rf "$tmp"
-  trap 'rm -rf /tmp/repo' EXIT
+  trap 'rm -rf /tmp/repo; fix_perms || true' EXIT
   git clone --depth 1 --branch "${GIT_BRANCH:-main}" "$url" "$tmp"
 
   # BUILD_ASSETS=auto compara la huella de las fuentes del build con la que se
@@ -187,10 +198,6 @@ do_init() {
   fi
   php artisan up || true
 
-  # El .env lo monta el host como :ro (lleva el PAT), asi que hay que
-  # saltarselo: un chown -R sobre /app moriria con "Read-only file system".
-  find "$APP_DIR" -path "$APP_DIR/.env" -prune -o -print0 | xargs -0 -r chown app:app
-  chown -R app:app "$DATA_DIR"
   echo "==> init completado"
 }
 

@@ -220,6 +220,18 @@ run_auto
 grep -q "npm install" "$STUB_LOG"
 assert_eq "auto compila si la marca no coincide" "0" "$?"
 
+echo "init (falla a medias, aun asi devuelve los ficheros al usuario app):"
+FAILC="$(mktemp -d)"
+printf '#!/usr/bin/env bash\nexit 1\n' > "$FAILC/composer"; chmod +x "$FAILC/composer"
+mkdir -p "$FAILC/app"; touch "$FAILC/app/x"
+: > "$STUB_LOG"
+env PATH="$FAILC:$PWD/tests/stubs:$PATH" APP_DIR="$FAILC/app" DATA_DIR="$FAILC/data" \
+    GIT_REPO=acme/shop APP_KEY=base64:x APP_ENV=local BUILD_ASSETS=false \
+    ./entrypoint.sh init >/dev/null 2>&1
+assert_eq "init falla si composer falla" "1" "$?"
+grep "^chown" "$STUB_LOG" | grep -q -- "$FAILC/app/x"
+assert_eq "chown corre aunque el init falle" "0" "$?"
+
 echo "init (git clone falla, no debe dejar el PAT en /tmp/repo):"
 REPO_BACKUP=""
 if [ -e /tmp/repo ]; then
