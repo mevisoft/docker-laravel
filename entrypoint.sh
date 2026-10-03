@@ -23,7 +23,7 @@ repo_url() {
 # hash de cada blob): el propio build genera ficheros ignorados en resources/js
 # (wayfinder) y con find la huella cambiaria despues de cada build.
 assets_hash() {
-  { git -C "$1" -c safe.directory="$1" ls-files -s -- resources 'vite.config.*' \
+  { git -C "$1" ls-files -s -- resources 'vite.config.*' \
       'tailwind.config.*' 'postcss.config.*' package.json package-lock.json \
       pnpm-lock.yaml yarn.lock 2>/dev/null || true; } | cksum
 }
@@ -59,6 +59,11 @@ fix_perms() {
 do_init() {
   validate_env
 
+  # El .git lo deja chown como app y este init corre como root: git lo trata
+  # como propietario ajeno y se niega. Global (no -c) porque tambien lo usa
+  # composer, que ejecuta git en /app para detectar la version del proyecto.
+  git config --global --add safe.directory "$APP_DIR"
+
   local url branch clean
   url="$(repo_url "$GIT_REPO" "${GITHUB_PAT:-}")"
   branch="${GIT_BRANCH:-main}"
@@ -81,11 +86,10 @@ do_init() {
   # /app es un volumen con .env y storage montados, asi que no se puede
   # clonar en ella: se inicializa el repo en sitio y se trae solo el commit
   # de la rama. reset --hard (no pull) para no tener merges ni conflictos, y
-  # borra lo que el repo elimino. safe.directory: el .git lo deja chown como
-  # app y este init corre como root, que git trata como propietario ajeno.
+  # borra lo que el repo elimino.
   echo "==> sincronizando ${GIT_REPO} (${branch}) en ${APP_DIR}"
   mkdir -p "$APP_DIR"
-  g() { git -C "$APP_DIR" -c safe.directory="$APP_DIR" "$@"; }
+  g() { git -C "$APP_DIR" "$@"; }
   [ -d "$APP_DIR/.git" ] || g init -q
   g fetch --depth 1 "$url" "$branch"
   g reset -q --hard FETCH_HEAD
