@@ -19,11 +19,13 @@ repo_url() {
 
 # Huella de todo lo que puede cambiar el resultado del build: resources entero
 # (js, css y vistas Blade que Tailwind escanea), configs de vite/tailwind/postcss
-# y package.json con sus lockfiles. cksum porque existe en cualquier sistema.
+# y package.json con sus lockfiles. Solo ficheros TRACKEADOS (ls-files -s da el
+# hash de cada blob): el propio build genera ficheros ignorados en resources/js
+# (wayfinder) y con find la huella cambiaria despues de cada build.
 assets_hash() {
-  (cd "$1" 2>/dev/null && find resources vite.config.* tailwind.config.* postcss.config.* \
-      package.json package-lock.json pnpm-lock.yaml yarn.lock -type f 2>/dev/null \
-    | sort | xargs -r cksum || true) | cksum
+  { git -C "$1" -c safe.directory="$1" ls-files -s -- resources 'vite.config.*' \
+      'tailwind.config.*' 'postcss.config.*' package.json package-lock.json \
+      pnpm-lock.yaml yarn.lock 2>/dev/null || true; } | cksum
 }
 
 validate_env() {
@@ -178,7 +180,7 @@ do_init() {
     printf '%s\n' "$new_hash" > "$marker"
   fi
 
-  php artisan storage:link || true
+  [ -L public/storage ] || php artisan storage:link || true
 
   if [ "${RUN_MIGRATIONS:-false}" = "true" ]; then
     echo "==> migraciones"
