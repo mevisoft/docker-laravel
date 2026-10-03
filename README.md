@@ -28,7 +28,7 @@ Todas las variables están documentadas en `.env.example`. Las principales:
 |---|---|
 | `GIT_REPO` | `owner/repo` o URL completa. Obligatoria |
 | `GITHUB_PAT` | Repositorios privados, y también dependencias privadas de Composer y de GitHub Packages (npm/pnpm/yarn) |
-| `REDEPLOY_STRATEGY` | `update` (rápido) o `fresh` (borra y reinstala) |
+| `REDEPLOY_STRATEGY` | `update` (borra lo eliminado del repo, conserva `vendor`, `node_modules` y `public/build`) o `fresh` (borra todo y reinstala) |
 | `BUILD_ASSETS` | `true` compila los assets con el gestor que indique tu lockfile (pnpm, yarn o npm) |
 | `RUN_MIGRATIONS` | `true` corre `php artisan migrate --force` |
 | `APP_ENV` | `production` instala sin dev-dependencies y cachea config |

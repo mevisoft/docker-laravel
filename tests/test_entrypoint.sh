@@ -38,8 +38,8 @@ assert_eq "host no-github se respeta tal cual" \
 
 echo "rsync_flags:"
 assert_eq "fresh borra" "--delete" "$(rsync_flags fresh)"
-assert_eq "update conserva" "" "$(rsync_flags update)"
-assert_eq "default es update" "" "$(rsync_flags)"
+assert_eq "update borra y protege lo generado" "0" "$(rsync_flags update | grep -qE -- '--delete.*--exclude=/vendor.*--exclude=/public/build'; echo $?)"
+assert_eq "default es update" "$(rsync_flags update)" "$(rsync_flags)"
 
 echo "validate_env:"
 ( GIT_REPO="" APP_KEY=base64:x validate_env ) 2>/dev/null
@@ -188,11 +188,37 @@ env PATH="$PWD/tests/stubs:$PATH" \
     ./entrypoint.sh init >/dev/null 2>&1
 LOG="$(cat "$STUB_LOG")"
 grep -q -- "--delete" <<< "$LOG"
-assert_eq "update no borra" "1" "$?"
+assert_eq "update borra lo eliminado del repo" "0" "$?"
+grep -q -- "--exclude=/vendor" <<< "$LOG"
+assert_eq "update protege vendor" "0" "$?"
 grep -q "npm run build" <<< "$LOG"
 assert_eq "no compila si BUILD_ASSETS=false" "1" "$?"
 grep -q "artisan optimize" <<< "$LOG"
 assert_eq "local no cachea" "1" "$?"
+
+echo "init (BUILD_ASSETS=auto, marca de build):"
+AUTO="$(mktemp -d)"
+run_auto() {
+  : > "$STUB_LOG"
+  env PATH="$PWD/tests/stubs:$PATH" APP_DIR="$AUTO/app" DATA_DIR="$AUTO/data" \
+      GIT_REPO=acme/shop APP_KEY=base64:x APP_ENV=local BUILD_ASSETS=auto \
+      ./entrypoint.sh init >/dev/null 2>&1
+}
+# el stub de git no crea /tmp/repo, asi que la huella de las fuentes es la del vacio
+mkdir -p "$AUTO/app/public/build"
+echo "4294967295 0" > "$AUTO/app/public/build/.assets-hash"
+run_auto
+grep -q "npm install" "$STUB_LOG"
+assert_eq "auto salta el build si la marca coincide" "1" "$?"
+rm -rf "$AUTO/app/public/build"
+run_auto
+grep -q "npm install" "$STUB_LOG"
+assert_eq "auto compila si no hay marca (p.ej. tras fresh)" "0" "$?"
+assert_eq "tras compilar guarda la marca" "4294967295 0" "$(cat "$AUTO/app/public/build/.assets-hash")"
+echo "otra huella" > "$AUTO/app/public/build/.assets-hash"
+run_auto
+grep -q "npm install" "$STUB_LOG"
+assert_eq "auto compila si la marca no coincide" "0" "$?"
 
 echo "init (git clone falla, no debe dejar el PAT en /tmp/repo):"
 REPO_BACKUP=""

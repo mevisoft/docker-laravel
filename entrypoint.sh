@@ -20,8 +20,19 @@ repo_url() {
 rsync_flags() {
   case "${1:-update}" in
     fresh) printf '%s\n' "--delete" ;;
-    *)     printf '' ;;
+    # update tambien borra lo eliminado del repo, pero protege lo generado en
+    # el servidor (no viene en el clon) para no reinstalar ni recompilar todo.
+    *)     printf '%s\n' "--delete --exclude=/vendor --exclude=/node_modules --exclude=/public/build --exclude=/public/storage --exclude=/bootstrap/cache" ;;
   esac
+}
+
+# Huella de todo lo que puede cambiar el resultado del build: resources entero
+# (js, css y vistas Blade que Tailwind escanea), configs de vite/tailwind/postcss
+# y package.json con sus lockfiles. cksum porque existe en cualquier sistema.
+assets_hash() {
+  (cd "$1" 2>/dev/null && find resources vite.config.* tailwind.config.* postcss.config.* \
+      package.json package-lock.json pnpm-lock.yaml yarn.lock -type f 2>/dev/null \
+    | sort | xargs -r cksum || true) | cksum
 }
 
 validate_env() {
@@ -54,17 +65,22 @@ do_init() {
   trap 'rm -rf /tmp/repo' EXIT
   git clone --depth 1 --branch "${GIT_BRANCH:-main}" "$url" "$tmp"
 
-  # BUILD_ASSETS=auto compara resources/js, vite.config.ts y package.json
-  # contra el despliegue anterior (APP_DIR es un volumen persistente) antes
-  # de que el rsync lo sobreescriba. Sin deploy previo se asume que hay cambios.
+  # BUILD_ASSETS=auto compara la huella de las fuentes del build con la que se
+  # guardo tras el ultimo build EXITOSO, en public/build/.assets-hash. Asi un
+  # build fallido se reintenta, y un rsync --delete que se lleve public/build
+  # se lleva tambien la marca y fuerza la recompilacion.
+  marker="$APP_DIR/public/build/.assets-hash"
+  new_hash="$(assets_hash "$tmp")"
   assets_changed=true
-  if [ "${BUILD_ASSETS:-true}" = "auto" ]; then
-    if [ -d "$APP_DIR/resources/js" ] \
-      && diff -rq "$APP_DIR/resources/js" "$tmp/resources/js" >/dev/null 2>&1 \
-      && diff -q "$APP_DIR/vite.config.ts" "$tmp/vite.config.ts" >/dev/null 2>&1 \
-      && diff -q "$APP_DIR/package.json" "$tmp/package.json" >/dev/null 2>&1; then
-      assets_changed=false
-    fi
+  if [ "${BUILD_ASSETS:-true}" = "auto" ] && [ "$(cat "$marker" 2>/dev/null)" = "$new_hash" ]; then
+    assets_changed=false
+  fi
+
+  # Sin esto los workers siguen con el codigo viejo y los usuarios ven codigo
+  # nuevo con vendor viejo mientras dura el despliegue. || true: en el primer
+  # despliegue aun no hay app que poner en mantenimiento.
+  if [ -f "$APP_DIR/artisan" ]; then
+    (cd "$APP_DIR" && php artisan down --retry=60) || true
   fi
 
   echo "==> sincronizando a ${APP_DIR}"
@@ -81,6 +97,11 @@ do_init() {
   fi
 
   cd "$APP_DIR"
+
+  # bootstrap/cache sobrevive al rsync (esta protegido) y trae config/rutas del
+  # despliegue anterior: composer arrancaria la app con ellas en package:discover,
+  # y fuera de production config.php viejo seguiria mandando sobre el .env.
+  rm -f bootstrap/cache/*.php
 
   # Da el token a Composer para dependencias privadas de GitHub declaradas en
   # el composer.json del proyecto. Con ${GITHUB_PAT:-} y el guard de no-vacio:
@@ -140,6 +161,8 @@ do_init() {
       npm install
       npm run build
     fi
+    mkdir -p public/build
+    printf '%s\n' "$new_hash" > "$marker"
   fi
 
   php artisan storage:link || true
@@ -155,6 +178,14 @@ do_init() {
     # asi que llamar a los tres por separado era hacer menos en mas lineas.
     php artisan optimize
   fi
+
+  # Los workers son procesos largos: sin esto siguen con el codigo viejo.
+  # schedule:work no hace falta, lanza un schedule:run nuevo cada minuto.
+  php artisan queue:restart || true
+  if [ -f config/horizon.php ]; then
+    php artisan horizon:terminate || true
+  fi
+  php artisan up || true
 
   # El .env lo monta el host como :ro (lleva el PAT), asi que hay que
   # saltarselo: un chown -R sobre /app moriria con "Read-only file system".
