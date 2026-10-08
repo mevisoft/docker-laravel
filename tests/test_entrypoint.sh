@@ -200,17 +200,17 @@ run_auto() {
       ./entrypoint.sh init >/dev/null 2>&1
 }
 # el stub de git no crea /tmp/repo, asi que la huella de las fuentes es la del vacio
-mkdir -p "$AUTO/app/public/build"
-echo "4294967295 0" > "$AUTO/app/public/build/.assets-hash"
+mkdir -p "$AUTO/app/storage"
+echo "4294967295 0" > "$AUTO/app/storage/.assets-hash"
 run_auto
 grep -q "npm install" "$STUB_LOG"
 assert_eq "auto salta el build si la marca coincide" "1" "$?"
-rm -rf "$AUTO/app/public/build"
+rm -f "$AUTO/app/storage/.assets-hash"
 run_auto
 grep -q "npm install" "$STUB_LOG"
 assert_eq "auto compila si no hay marca (p.ej. tras fresh)" "0" "$?"
-assert_eq "tras compilar guarda la marca" "4294967295 0" "$(cat "$AUTO/app/public/build/.assets-hash")"
-echo "otra huella" > "$AUTO/app/public/build/.assets-hash"
+assert_eq "tras compilar guarda la marca" "4294967295 0" "$(cat "$AUTO/app/storage/.assets-hash")"
+echo "otra huella" > "$AUTO/app/storage/.assets-hash"
 run_auto
 grep -q "npm install" "$STUB_LOG"
 assert_eq "auto compila si la marca no coincide" "0" "$?"

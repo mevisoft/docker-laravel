@@ -18,12 +18,13 @@ repo_url() {
 }
 
 # Huella de todo lo que puede cambiar el resultado del build: resources entero
-# (js, css y vistas Blade que Tailwind escanea), configs de vite/tailwind/postcss
+# (js, css y vistas Blade que Tailwind escanea), configs de vite/mix/tailwind/postcss
 # y package.json con sus lockfiles. Solo ficheros TRACKEADOS (ls-files -s da el
 # hash de cada blob): el propio build genera ficheros ignorados en resources/js
 # (wayfinder) y con find la huella cambiaria despues de cada build.
 assets_hash() {
   { git -C "$1" ls-files -s -- resources 'vite.config.*' \
+      webpack.mix.js \
       'tailwind.config.*' 'postcss.config.*' package.json package-lock.json \
       pnpm-lock.yaml yarn.lock 2>/dev/null || true; } | cksum
 }
@@ -83,7 +84,7 @@ do_init() {
   url="$(repo_url "$GIT_REPO" "${GITHUB_PAT:-}")"
   branch="${GIT_BRANCH:-main}"
   # fresh ademas borra lo ignorado (vendor, node_modules, public/build y con
-  # ellos la marca de build); update lo conserva. En ambos, .env (montado :ro)
+  # ellos public/build); update lo conserva. En ambos, .env (montado :ro)
   # y storage (volumen) quedan fuera.
   clean="-fd"
   [ "${REDEPLOY_STRATEGY:-update}" = "fresh" ] && clean="-fdx"
@@ -112,13 +113,15 @@ do_init() {
   echo "==> commit $(g rev-parse --short HEAD)"
 
   # BUILD_ASSETS=auto compara la huella de las fuentes del build con la que se
-  # guardo tras el ultimo build EXITOSO, en public/build/.assets-hash. Asi un
-  # build fallido se reintenta, y un fresh que se lleve public/build se lleva
-  # tambien la marca y fuerza la recompilacion.
-  marker="$APP_DIR/public/build/.assets-hash"
+  # guardo tras el ultimo build EXITOSO. Asi un build fallido se reintenta.
+  # La marca vive en storage (volumen, fuera del clean) y no en public/build:
+  # Mix no escribe ahi, y un fichero suelto en public lo borraria git clean.
+  # Como fresh ya no se lleva la marca, fresh fuerza la recompilacion.
+  marker="$APP_DIR/storage/.assets-hash"
   new_hash="$(assets_hash "$APP_DIR")"
   assets_changed=true
-  if [ "${BUILD_ASSETS:-true}" = "auto" ] && [ "$(cat "$marker" 2>/dev/null)" = "$new_hash" ]; then
+  if [ "${BUILD_ASSETS:-true}" = "auto" ] && [ "${REDEPLOY_STRATEGY:-update}" != "fresh" ] \
+     && [ "$(cat "$marker" 2>/dev/null)" = "$new_hash" ]; then
     assets_changed=false
   fi
 
@@ -195,7 +198,6 @@ do_init() {
       npm install
       npm run build
     fi
-    mkdir -p public/build
     printf '%s\n' "$new_hash" > "$marker"
   fi
 
