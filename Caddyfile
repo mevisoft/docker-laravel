@@ -18,8 +18,20 @@
 	root * {$SERVER_ROOT:/app/public}
 	encode zstd br gzip
 
+	# Access log a stdout (Apache ya lo hace): paridad entre variantes.
+	log {
+		output stdout
+	}
+
+	header {
+		-Server
+		X-Content-Type-Options nosniff
+	}
+
+	# El entrypoint deriva CADDY_MAX_SIZE de PHP_POST_MAX_SIZE para que ambas
+	# variantes tengan el mismo limite de subida.
 	request_body {
-		max_size {$CADDY_MAX_SIZE:16MB}
+		max_size {$CADDY_MAX_SIZE:16MiB}
 	}
 
 	php_server {

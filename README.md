@@ -38,6 +38,23 @@ nunca `#` a mitad de línea. Un valor que contenga espacios (como `QUEUE_OPTS`)
 sí debe ir entrecomillado: el parser dotenv de Laravel rechaza espacios sin
 comillas, y Compose las retira antes de pasar la variable al contenedor.
 
+### Producción: comportamiento a tener en cuenta
+
+- **Init fallido:** si el despliegue falla tras poner la app en mantenimiento, el
+  init la vuelve a levantar. `KEEP_DOWN_ON_FAIL=true` la deja en mantenimiento.
+- **`GITHUB_PAT` solo llega al servicio `init`**; `app`, `queue` y `schedule` lo
+  reciben vacío.
+- **Límite de subida:** `PHP_POST_MAX_SIZE` fija también el `max_size` de Caddy
+  (salvo que definas `CADDY_MAX_SIZE`); sube `PHP_UPLOAD_MAX_FILESIZE` y
+  `PHP_POST_MAX_SIZE` juntos.
+- **Apache:** `APACHE_MAX_REQUEST_WORKERS` (25) limita los procesos prefork;
+  calcúlalo como RAM disponible / `PHP_MEMORY_LIMIT`.
+- **Queue:** `stop_grace_period` (120s) debe ser mayor que el `--timeout` de `QUEUE_OPTS`.
+- **OPcache** mantiene `validate_timestamps=1`: el init cambia el código sin
+  reiniciar `app`. No lo pongas a 0 sin reiniciar `app` tras cada despliegue.
+- **Node:** `--build-arg NODE_MAJOR=24` cambia la versión (22 por defecto).
+- Las URLs `git@...` no funcionan (la imagen no trae cliente SSH ni claves): usa HTTPS + PAT.
+
 ## Base de datos
 
 Por defecto SQLite en `/data/database.sqlite`, un volumen separado del código,

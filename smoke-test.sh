@@ -2,7 +2,6 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-PROJECT=laravel-smoke
 ENVF=.env.smoke
 PORT=8901
 # SMOKE_REPO/SMOKE_BRANCH por defecto apuntan al esqueleto oficial de Laravel
@@ -12,6 +11,13 @@ PORT=8901
 SMOKE_REPO="${SMOKE_REPO:-laravel/laravel}"
 SMOKE_BRANCH="${SMOKE_BRANCH:-13.x}"
 
+# VARIANT=apache ./smoke-test.sh prueba una; por defecto prueba las dos.
+if [ -z "${VARIANT:-}" ]; then
+  for v in frankenphp apache; do VARIANT="$v" "$0" || exit 1; done
+  exit 0
+fi
+PROJECT="laravel-smoke-$VARIANT"
+
 cleanup() {
   docker compose --env-file "$ENVF" -p "$PROJECT" down -v --remove-orphans >/dev/null 2>&1 || true
   rm -f "$ENVF"
@@ -19,11 +25,11 @@ cleanup() {
 trap cleanup EXIT
 
 echo "==> construyendo imagen de prueba"
-docker build -t laravel-deploy:smoke .
+docker build --build-arg VARIANT="$VARIANT" -t "laravel-deploy:smoke-$VARIANT" .
 
 cat > "$ENVF" <<EOF
 ENV_FILE=$ENVF
-IMAGE=laravel-deploy:smoke
+IMAGE=laravel-deploy:smoke-$VARIANT
 GIT_REPO=$SMOKE_REPO
 GIT_BRANCH=$SMOKE_BRANCH
 GITHUB_PAT=
@@ -31,8 +37,6 @@ REDEPLOY_STRATEGY=fresh
 BUILD_ASSETS=true
 RUN_MIGRATIONS=true
 APP_PORT=$PORT
-OCTANE_WORKERS=2
-OCTANE_MAX_REQUESTS=500
 QUEUE_OPTS="--tries=1 --timeout=30"
 APP_KEY=base64:$(openssl rand -base64 32)
 APP_ENV=production
@@ -74,10 +78,15 @@ case "$RUNNING" in
   *) echo "FAIL: schedule no esta running (running: $RUNNING)" >&2; exit 1 ;;
 esac
 
-echo "==> verificando que el PAT no quedo en el volumen"
-if docker compose --env-file "$ENVF" -p "$PROJECT" run --rm --no-deps -T app test -d /app/.git; then
-  echo "FAIL: /app/.git existe, el token podria haberse filtrado" >&2
+echo "==> verificando que el PAT no quedo en el volumen (.git persiste, el token no)"
+if docker compose --env-file "$ENVF" -p "$PROJECT" run --rm --no-deps -T app \
+     grep -rq x-access-token /app/.git; then
+  echo "FAIL: hay un token en /app/.git" >&2
   exit 1
 fi
 
-echo "OK: smoke test superado"
+echo "==> segundo despliegue (rama update) y /up otra vez"
+docker compose --env-file "$ENVF" -p "$PROJECT" run --rm -T init init >/dev/null
+curl -fsS "http://localhost:$PORT/up" >/dev/null || { echo "FAIL: /up tras redeploy" >&2; exit 1; }
+
+echo "OK: smoke test superado ($VARIANT)"

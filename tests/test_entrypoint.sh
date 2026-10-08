@@ -227,6 +227,21 @@ assert_eq "init falla si composer falla" "1" "$?"
 grep "^chown" "$STUB_LOG" | grep -q -- "$FAILC/app/x"
 assert_eq "chown corre aunque el init falle" "0" "$?"
 
+echo "init (falla tras el down, la app vuelve a levantarse):"
+touch "$FAILC/app/artisan"
+: > "$STUB_LOG"
+env PATH="$FAILC:$PWD/tests/stubs:$PATH" APP_DIR="$FAILC/app" DATA_DIR="$FAILC/data" \
+    GIT_REPO=acme/shop APP_KEY=base64:x APP_ENV=local BUILD_ASSETS=false \
+    ./entrypoint.sh init >/dev/null 2>&1
+grep -q "^php artisan up" "$STUB_LOG"
+assert_eq "artisan up corre tras un init fallido" "0" "$?"
+: > "$STUB_LOG"
+env PATH="$FAILC:$PWD/tests/stubs:$PATH" APP_DIR="$FAILC/app" DATA_DIR="$FAILC/data" \
+    GIT_REPO=acme/shop APP_KEY=base64:x APP_ENV=local BUILD_ASSETS=false KEEP_DOWN_ON_FAIL=true \
+    ./entrypoint.sh init >/dev/null 2>&1
+grep -q "^php artisan up" "$STUB_LOG"
+assert_eq "KEEP_DOWN_ON_FAIL=true no la levanta" "1" "$?"
+
 echo "init (git fetch falla, no debe dejar el PAT en el volumen):"
 : > "$STUB_LOG"
 env PATH="$PWD/tests/stubs-failgit:$PWD/tests/stubs:$PATH" \

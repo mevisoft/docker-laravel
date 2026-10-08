@@ -56,6 +56,21 @@ fix_perms() {
   chown -R app:app "$DATA_DIR"
 }
 
+# Salida del init: limpia FETCH_HEAD, arregla permisos y, si el despliegue
+# fallo despues de poner la app en mantenimiento, la vuelve a levantar (con el
+# codigo/vendor que haya quedado) en vez de dejar un 503 permanente.
+# KEEP_DOWN_ON_FAIL=true conserva el mantenimiento a proposito (p. ej. si una
+# migracion a medias hace inseguro servir trafico).
+on_init_exit() {
+  local rc=$?
+  rm -f "$APP_DIR/.git/FETCH_HEAD"
+  if [ "$rc" -ne 0 ] && [ "${DOWNED:-0}" = "1" ] && [ "${KEEP_DOWN_ON_FAIL:-false}" != "true" ]; then
+    echo "==> init fallo (rc=$rc): levantando la app de nuevo" >&2
+    (cd "$APP_DIR" && php artisan up) || true
+  fi
+  fix_perms || true
+}
+
 do_init() {
   validate_env
 
@@ -74,13 +89,13 @@ do_init() {
   [ "${REDEPLOY_STRATEGY:-update}" = "fresh" ] && clean="-fdx"
 
   # FETCH_HEAD apunta a la URL con el PAT, y APP_DIR es un volumen persistente.
-  trap 'rm -f "$APP_DIR/.git/FETCH_HEAD"; fix_perms || true' EXIT
+  trap on_init_exit EXIT
 
   # Sin esto los workers siguen con el codigo viejo y los usuarios ven codigo
   # nuevo con vendor viejo mientras dura el despliegue. || true: en el primer
   # despliegue aun no hay app que poner en mantenimiento.
   if [ -f "$APP_DIR/artisan" ]; then
-    (cd "$APP_DIR" && php artisan down --retry=60) || true
+    (cd "$APP_DIR" && php artisan down --retry=60) && DOWNED=1 || true
   fi
 
   # /app es un volumen con .env y storage montados, asi que no se puede
@@ -227,6 +242,14 @@ main() {
       # publicado del compose y el healthcheck; el Caddyfile trae auto_https
       # off: el TLS lo pone el proxy de delante.
       export SERVER_NAME="${SERVER_NAME:-:3000}"
+      # Mismo limite de subida que PHP (K/M/G de PHP son binarios: 16M -> 16MiB).
+      if [ -z "${CADDY_MAX_SIZE:-}" ]; then
+        case "${PHP_POST_MAX_SIZE:-16M}" in
+          *[KkMmGg]) CADDY_MAX_SIZE="${PHP_POST_MAX_SIZE:-16M}iB" ;;
+          *)         CADDY_MAX_SIZE="${PHP_POST_MAX_SIZE}" ;;
+        esac
+        export CADDY_MAX_SIZE
+      fi
       exec frankenphp run --config /etc/frankenphp/Caddyfile
       ;;
     schedule)

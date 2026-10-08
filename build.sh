@@ -9,7 +9,7 @@ read_env() {
   # tr/sed: un .env guardado en Windows deja un \r al final del valor, y el
   # guard de no-vacio no lo detecta: la referencia de imagen sale corrupta y
   # docker falla luego con un error que no apunta a la causa.
-  val="$(grep -E "^$1=" .env | tail -1 | cut -d= -f2- | tr -d '\r' | sed 's/[[:space:]]*$//')"
+  val="$(grep -E "^$1=" .env | tail -1 | cut -d= -f2- | tr -d '\r' | sed -e 's/[[:space:]]*$//' -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'$/\1/")"
   printf '%s\n' "${val:-${2:-}}"
 }
 
@@ -45,9 +45,14 @@ if [ "${PUSH:-false}" = "true" ]; then
       exit 1
     fi
   fi
-  docker buildx build --platform "$PLATFORMS" --build-arg VARIANT="$VARIANT" -t "$REF" --push .
+  docker buildx build --pull --platform "$PLATFORMS" --build-arg VARIANT="$VARIANT" \
+    --provenance=mode=max --sbom=true -t "$REF" --push .
   echo "==> publicada: $REF"
 else
-  docker buildx build --platform "$PLATFORMS" --build-arg VARIANT="$VARIANT" -t "$REF" --load .
+  # --load solo admite una plataforma: con varias hay que publicar.
+  case "$PLATFORMS" in
+    *,*) echo "ERROR: PLATFORMS multiple ($PLATFORMS) no se puede cargar en local; usa PUSH=true o una sola plataforma" >&2; exit 1 ;;
+  esac
+  docker buildx build --pull --platform "$PLATFORMS" --build-arg VARIANT="$VARIANT" -t "$REF" --load .
   echo "==> construida en local: $REF"
 fi
