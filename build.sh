@@ -24,6 +24,10 @@ PLATFORMS="$(read_env PLATFORMS linux/amd64)"
 # VARIANT=apache ./build.sh -> imagen php:apache, etiquetada <tag>-apache.
 VARIANT="${VARIANT:-frankenphp}"
 [ "$VARIANT" = "frankenphp" ] && SUFFIX="" || SUFFIX="-$VARIANT"
+# PHP_VERSION / NODE_MAJOR opcionales, p. ej. PHP_VERSION=8.3 NODE_MAJOR=24 ./build.sh
+BUILD_ARGS=""
+[ -n "${PHP_VERSION:-}" ] && BUILD_ARGS="$BUILD_ARGS --build-arg PHP_VERSION=$PHP_VERSION"
+[ -n "${NODE_MAJOR:-}" ] && BUILD_ARGS="$BUILD_ARGS --build-arg NODE_MAJOR=$NODE_MAJOR"
 REF="$REGISTRY/$IMAGE_NAME:$TAG$SUFFIX"
 echo "==> construyendo $REF ($PLATFORMS)"
 
@@ -45,7 +49,7 @@ if [ "${PUSH:-false}" = "true" ]; then
       exit 1
     fi
   fi
-  docker buildx build --pull --platform "$PLATFORMS" --build-arg VARIANT="$VARIANT" \
+  docker buildx build --pull --platform "$PLATFORMS" --build-arg VARIANT="$VARIANT" $BUILD_ARGS \
     --provenance=mode=max --sbom=true -t "$REF" --push .
   echo "==> publicada: $REF"
 else
@@ -53,6 +57,6 @@ else
   case "$PLATFORMS" in
     *,*) echo "ERROR: PLATFORMS multiple ($PLATFORMS) no se puede cargar en local; usa PUSH=true o una sola plataforma" >&2; exit 1 ;;
   esac
-  docker buildx build --pull --platform "$PLATFORMS" --build-arg VARIANT="$VARIANT" -t "$REF" --load .
+  docker buildx build --pull --platform "$PLATFORMS" --build-arg VARIANT="$VARIANT" $BUILD_ARGS -t "$REF" --load .
   echo "==> construida en local: $REF"
 fi

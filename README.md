@@ -92,6 +92,26 @@ confirmarlo. Sin terminal donde preguntar, el script aborta salvo que pases
 Funciona igual con GHCR (`REGISTRY=ghcr.io`) y Docker Hub
 (`REGISTRY=docker.io`); haz `docker login` al registry antes.
 
+## Publicar desde GitHub Actions
+
+El workflow manual `.github/workflows/build-publish.yml` (Actions → *Build & publish image* → Run workflow) construye y publica en `ghcr.io/<owner>/<repo>`:
+
+| Input | Valores |
+|---|---|
+| `tag` | obligatorio, p. ej. `v1.2.0` (con `apache` queda `v1.2.0-apache`) |
+| `variant` | `frankenphp` / `apache` |
+| `php_version` | `8.3` / `8.4` / `8.5` |
+| `node_major` | `22` / `24` |
+| `platforms` | `linux/amd64`, `linux/arm64` o `both` |
+
+Con `both` cada arquitectura se construye en su runner nativo (amd64 y arm64, sin QEMU) y un job final une ambas en un único tag multi-arch. Los runners arm64 son gratuitos solo en repos públicos. Desde la CLI:
+
+```bash
+gh workflow run build-publish.yml -f tag=v1.2.0 -f variant=apache -f php_version=8.4 -f node_major=22 -f platforms=both
+```
+
+Localmente, `build.sh` acepta `PHP_VERSION` y `NODE_MAJOR` como variables de entorno.
+
 ## Tests
 
 ```bash

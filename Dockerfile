@@ -2,8 +2,9 @@
 # Ambas comparten todo desde "common": mismo entrypoint, mismos comandos.
 ARG VARIANT=frankenphp
 ARG NODE_MAJOR=22
+ARG PHP_VERSION=8.4
 
-FROM dunglas/frankenphp:php8.4 AS base-frankenphp
+FROM dunglas/frankenphp:php${PHP_VERSION} AS base-frankenphp
 RUN install-php-extensions \
     pdo_mysql \
     pdo_pgsql \
@@ -23,7 +24,7 @@ RUN install-php-extensions \
 COPY Caddyfile /etc/frankenphp/Caddyfile
 ENV WEB_SERVER=frankenphp
 
-FROM php:8.4-apache AS base-apache
+FROM php:${PHP_VERSION}-apache AS base-apache
 COPY --from=mlocati/php-extension-installer /usr/bin/install-php-extensions /usr/local/bin/
 RUN install-php-extensions \
     pdo_mysql \

@@ -1,0 +1,148 @@
+name: Build & publish image
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag de la imagen (p. ej. v1.2.0). La variante apache anade el sufijo -apache"
+        required: true
+        type: string
+      variant:
+        description: "Variante del servidor web"
+        type: choice
+        options: [frankenphp, apache]
+        default: frankenphp
+      php_version:
+        description: "Version de PHP"
+        type: choice
+        options: ["8.3", "8.4", "8.5"]
+        default: "8.4"
+      node_major:
+        description: "Version mayor de Node"
+        type: choice
+        options: ["22", "24"]
+        default: "22"
+      platforms:
+        description: "Plataformas (both = amd64 + arm64, cada una en su runner nativo)"
+        type: choice
+        options: [linux/amd64, linux/arm64, both]
+        default: both
+
+concurrency:
+  group: build-${{ inputs.tag }}-${{ inputs.variant }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.p.outputs.matrix }}
+      image: ${{ steps.p.outputs.image }}
+      ref_tag: ${{ steps.p.outputs.ref_tag }}
+    steps:
+      - id: p
+        env:
+          TAG: ${{ inputs.tag }}
+          VARIANT: ${{ inputs.variant }}
+          PLATFORMS: ${{ inputs.platforms }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if ! [[ "$TAG" =~ ^[A-Za-z0-9_][A-Za-z0-9._-]{0,127}$ ]]; then
+            echo "::error::tag invalido: $TAG"; exit 1
+          fi
+          suffix=""; [ "$VARIANT" = frankenphp ] || suffix="-$VARIANT"
+          amd='{"platform":"linux/amd64","runner":"ubuntu-24.04","pair":"amd64"}'
+          arm='{"platform":"linux/arm64","runner":"ubuntu-24.04-arm","pair":"arm64"}'
+          case "$PLATFORMS" in
+            linux/amd64) m="[$amd]" ;;
+            linux/arm64) m="[$arm]" ;;
+            both)        m="[$amd,$arm]" ;;
+            *) echo "::error::plataforma invalida"; exit 1 ;;
+          esac
+          {
+            echo "matrix=$m"
+            echo "image=${REGISTRY}/${REPO,,}"
+            echo "ref_tag=${TAG}${suffix}"
+          } >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: prepare
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: true
+      matrix:
+        include: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: ${{ matrix.platform }}
+          build-args: |
+            VARIANT=${{ inputs.variant }}
+            PHP_VERSION=${{ inputs.php_version }}
+            NODE_MAJOR=${{ inputs.node_major }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ inputs.tag }}
+            dev.php.version=${{ inputs.php_version }}
+            dev.node.major=${{ inputs.node_major }}
+          outputs: type=image,name=${{ needs.prepare.outputs.image }},push-by-digest=true,name-canonical=true,push=true
+          provenance: false
+          sbom: false
+          cache-from: type=gha,scope=${{ inputs.variant }}-${{ inputs.php_version }}-${{ matrix.pair }}
+          cache-to: type=gha,mode=max,scope=${{ inputs.variant }}-${{ inputs.php_version }}-${{ matrix.pair }}
+      - name: Guardar digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/digests"
+          touch "$RUNNER_TEMP/digests/${DIGEST#sha256:}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ matrix.pair }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge:
+    needs: [prepare, build]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: digests-*
+          merge-multiple: true
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Crear manifest y publicar tag
+        env:
+          IMAGE: ${{ needs.prepare.outputs.image }}
+          REF_TAG: ${{ needs.prepare.outputs.ref_tag }}
+        working-directory: ${{ runner.temp }}/digests
+        run: |
+          set -euo pipefail
+          # un solo tag (multi-arch si hay dos digests); los digests por arch no llevan tag
+          docker buildx imagetools create -t "$IMAGE:$REF_TAG" $(printf "$IMAGE@sha256:%s " *)
+          docker buildx imagetools inspect "$IMAGE:$REF_TAG" | tee -a "$GITHUB_STEP_SUMMARY"
