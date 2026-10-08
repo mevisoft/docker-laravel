@@ -216,15 +216,16 @@ main() {
       ;;
     app)
       cd "$APP_DIR"
+      # WEB_SERVER lo fija la imagen (frankenphp | apache). Los comandos
+      # init/schedule/queue/horizon son identicos en ambas.
+      if [ "${WEB_SERVER:-frankenphp}" = "apache" ]; then
+        exec apache2-foreground
+      fi
       # FrankenPHP sirve Laravel directamente, sin Octane, con el Caddyfile
       # que la imagen trae en /etc/frankenphp (no en /app: ahi lo borraria el
-      # rsync del init). El Caddyfile resuelve el front controller con
-      # php_server + try_files, y anade compresion y limite de tamano de
-      # peticion.
-      #
-      # SERVER_NAME por defecto a :3000 para que cuadren el puerto publicado
-      # del compose y el healthcheck. Se puede sobreescribir por .env, pero
-      # el Caddyfile trae auto_https off: el TLS lo pone el proxy de delante.
+      # init). SERVER_NAME por defecto a :3000 para que cuadren el puerto
+      # publicado del compose y el healthcheck; el Caddyfile trae auto_https
+      # off: el TLS lo pone el proxy de delante.
       export SERVER_NAME="${SERVER_NAME:-:3000}"
       exec frankenphp run --config /etc/frankenphp/Caddyfile
       ;;

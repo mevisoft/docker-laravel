@@ -21,7 +21,10 @@ PLATFORMS="$(read_env PLATFORMS linux/amd64)"
 [ -n "$REGISTRY" ]   || { echo "ERROR: falta REGISTRY en .env" >&2; exit 1; }
 [ -n "$IMAGE_NAME" ] || { echo "ERROR: falta IMAGE_NAME en .env" >&2; exit 1; }
 
-REF="$REGISTRY/$IMAGE_NAME:$TAG"
+# VARIANT=apache ./build.sh -> imagen php:apache, etiquetada <tag>-apache.
+VARIANT="${VARIANT:-frankenphp}"
+[ "$VARIANT" = "frankenphp" ] && SUFFIX="" || SUFFIX="-$VARIANT"
+REF="$REGISTRY/$IMAGE_NAME:$TAG$SUFFIX"
 echo "==> construyendo $REF ($PLATFORMS)"
 
 # Publicar NO es el default: subir una imagen a un registry es irreversible en la
@@ -42,9 +45,9 @@ if [ "${PUSH:-false}" = "true" ]; then
       exit 1
     fi
   fi
-  docker buildx build --platform "$PLATFORMS" -t "$REF" --push .
+  docker buildx build --platform "$PLATFORMS" --build-arg VARIANT="$VARIANT" -t "$REF" --push .
   echo "==> publicada: $REF"
 else
-  docker buildx build --platform "$PLATFORMS" -t "$REF" --load .
+  docker buildx build --platform "$PLATFORMS" --build-arg VARIANT="$VARIANT" -t "$REF" --load .
   echo "==> construida en local: $REF"
 fi
