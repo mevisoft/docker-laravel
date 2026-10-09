@@ -253,6 +253,45 @@ assert_eq "init termina mal si git fetch falla" "1" "$?"
 assert_eq "el PAT no queda en .git" "" \
   "$(grep -rl ghp_xxx "$WORK/app3" 2>/dev/null)"
 
+echo "init (EXTRA_TOOLS):"
+SRV="$(mktemp -d)"
+printf '#!/bin/sh\necho 1.0\n' > "$SRV/mytool"
+SHA="$(sha256sum "$SRV/mytool" | cut -d' ' -f1)"
+run_tools() {  # BIN_DIR en $1; el resto, variables extra
+  local bin="$1"; shift
+  : > "$STUB_LOG"
+  env PATH="$PWD/tests/stubs:$PATH" STUB_CURL_DIR="$SRV" BIN_DIR="$bin" \
+      APP_DIR="$WORK/tools-app" DATA_DIR="$WORK/tools-data" \
+      GIT_REPO=acme/shop APP_KEY=base64:x APP_ENV=local BUILD_ASSETS=false "$@" \
+      ./entrypoint.sh init >/dev/null 2>&1
+}
+run_tools "$WORK/b2" "EXTRA_TOOLS=mytool|https://x.test/mytool|$SHA"
+assert_eq "sha256 correcto instala" "0" "$?"
+assert_eq "deja el binario ejecutable" "0" "$([ -x "$WORK/b2/mytool" ] && echo 0 || echo 1)"
+run_tools "$WORK/b2" "EXTRA_TOOLS=mytool|https://x.test/mytool|$SHA"
+grep -q "^curl .*-o" "$STUB_LOG"
+assert_eq "sin cambio de hash no vuelve a descargar" "1" "$?"
+run_tools "$WORK/b3" "EXTRA_TOOLS=mytool|https://x.test/mytool|$(printf '0%.0s' {1..64})"
+assert_eq "sha256 que no coincide aborta el init" "1" "$?"
+assert_eq "sha256 incorrecto no instala nada" "1" "$([ -e "$WORK/b3/mytool" ] && echo 0 || echo 1)"
+run_tools "$WORK/b4" "EXTRA_TOOLS=mytool|https://x.test/mytool|"
+assert_eq "sin sha256 aborta" "1" "$?"
+run_tools "$WORK/b5" "EXTRA_TOOLS=mytool|http://x.test/mytool|$SHA"
+assert_eq "rechaza http" "1" "$?"
+run_tools "$WORK/b6" "EXTRA_TOOLS=../mytool|https://x.test/mytool|$SHA"
+assert_eq "rechaza nombres con ruta" "1" "$?"
+cp "$SRV/mytool" "$SRV/yt-dlp_linux"
+echo "$SHA  yt-dlp_linux" > "$SRV/SHA2-256SUMS"
+run_tools "$WORK/b9" YTDLP_VERSION=2026.01.01
+assert_eq "YTDLP_VERSION instala yt-dlp" "0" "$([ -x "$WORK/b9/yt-dlp" ] && echo 0 || echo 1)"
+grep -q "download/2026.01.01/yt-dlp_linux" "$STUB_LOG"
+assert_eq "YTDLP_VERSION descarga ese tag" "0" "$?"
+echo "0000  yt-dlp_linux" > "$SRV/SHA2-256SUMS"
+run_tools "$WORK/b10" YTDLP_VERSION=latest
+assert_eq "hash del SUMS que no coincide aborta" "1" "$?"
+run_tools "$WORK/b8"
+assert_eq "sin EXTRA_TOOLS no crea el directorio" "1" "$([ -d "$WORK/b8" ] && echo 0 || echo 1)"
+
 echo "dispatch de roles:"
 : > "$STUB_LOG"
 env PATH="$PWD/tests/stubs:$PATH" APP_DIR="$WORK/app" \

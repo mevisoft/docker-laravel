@@ -53,6 +53,15 @@ comillas, y Compose las retira antes de pasar la variable al contenedor.
 - **OPcache** mantiene `validate_timestamps=1`: el init cambia el código sin
   reiniciar `app`. No lo pongas a 0 sin reiniciar `app` tras cada despliegue.
 - **Node:** `--build-arg NODE_MAJOR=24` cambia la versión (22 por defecto).
+- **ffmpeg, ffprobe y node** vienen en la imagen (ffmpeg fijado por digest).
+- **yt-dlp:** `YTDLP_VERSION=2026.08.19` (o `latest`) en el `.env` lo instala el
+  `init` en el volumen `app_bin`; cambiar la variable y redesplegar lo actualiza
+  sin rebuild. El hash se verifica contra el `SHA2-256SUMS` de ese release. Vacio,
+  no se instala. La imagen ya trae `/etc/yt-dlp.conf` con `--js-runtimes node`.
+- **Binarios extra:** `EXTRA_TOOLS="nombre|https://url|sha256,..."` los descarga
+  el `init` al volumen `app_bin`, que `app`, `queue` y `schedule` montan de solo
+  lectura y va en el `PATH`. El sha256 es obligatorio y un hash que no coincide
+  aborta el init; solo HTTPS.
 - Las URLs `git@...` no funcionan (la imagen no trae cliente SSH ni claves): usa HTTPS + PAT.
 
 ## Base de datos

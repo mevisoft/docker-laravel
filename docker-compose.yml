@@ -5,6 +5,7 @@ x-app: &app
     - app_code:/app
     - app_storage:/app/storage
     - app_data:/data
+    - app_bin:/opt/bin:ro
   restart: unless-stopped
   init: true
   logging:
@@ -29,6 +30,12 @@ services:
     <<: *app
     command: init
     user: "0:0"
+    # Unico servicio que puede escribir en app_bin.
+    volumes:
+      - app_code:/app
+      - app_storage:/app/storage
+      - app_data:/data
+      - app_bin:/opt/bin
     restart: "no"
 
   app:
@@ -70,3 +77,4 @@ volumes:
   app_code:
   app_storage:
   app_data:
+  app_bin:

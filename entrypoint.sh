@@ -72,6 +72,53 @@ on_init_exit() {
   fix_perms || true
 }
 
+BIN_DIR="${BIN_DIR:-/opt/bin}"
+
+# EXTRA_TOOLS="nombre|https://url|sha256,otro|https://url|sha256": binarios
+# sueltos en el volumen app_bin, que app, queue y schedule montan :ro. Los
+# instala root y siguen siendo de root: ni el proceso web ni yt-dlp -U pueden
+# sustituirlos. Sin sha256 verificado no se instala nada.
+install_tool() {
+  local name="$1" url="$2" sha="$3" tmp
+  # Marca por herramienta: sin cambio de hash no se vuelve a descargar.
+  [ "$(cat "$BIN_DIR/.$name.sha256" 2>/dev/null)" = "$sha" ] && return 0
+  echo "==> instalando $name"
+  tmp="$(mktemp)"
+  curl -fsSL --proto '=https' --tlsv1.2 -o "$tmp" "$url"
+  if [ "$(sha256sum "$tmp" | cut -d' ' -f1)" != "$sha" ]; then
+    echo "ERROR: sha256 de $name no coincide ($url)" >&2
+    rm -f "$tmp"; return 1
+  fi
+  install -m 755 "$tmp" "$BIN_DIR/$name.new"
+  rm -f "$tmp"
+  mv -f "$BIN_DIR/$name.new" "$BIN_DIR/$name"
+  printf '%s\n' "$sha" > "$BIN_DIR/.$name.sha256"
+}
+
+# YTDLP_VERSION (tag o latest) instala yt-dlp; el hash sale del SHA2-256SUMS de
+# ese release. Cambiar la variable y redesplegar actualiza sin rebuild.
+install_tools() {
+  [ -n "${EXTRA_TOOLS:-}${YTDLP_VERSION:-}" ] || return 0
+  mkdir -p "$BIN_DIR"
+  local t name url sha base asset=yt-dlp_linux
+  if [ -n "${YTDLP_VERSION:-}" ]; then
+    base="https://github.com/yt-dlp/yt-dlp/releases"
+    if [ "$YTDLP_VERSION" = latest ]; then base="$base/latest/download"; else base="$base/download/$YTDLP_VERSION"; fi
+    [ "$(uname -m)" = aarch64 ] && asset=yt-dlp_linux_aarch64
+    sha="$(curl -fsSL --proto '=https' --tlsv1.2 "$base/SHA2-256SUMS" | awk -v a="$asset" '$2==a{print $1}')"
+    [ -n "$sha" ] || { echo "ERROR: sin sha256 de yt-dlp en $base" >&2; return 1; }
+    install_tool yt-dlp "$base/$asset" "$sha"
+  fi
+  for t in $(printf '%s' "$EXTRA_TOOLS" | tr ',' ' '); do
+    IFS='|' read -r name url sha <<< "$t"
+    case "$name" in ''|*[!A-Za-z0-9._-]*|.*) echo "ERROR: nombre invalido en EXTRA_TOOLS: $t" >&2; return 1 ;; esac
+    case "$url" in https://*) ;; *) echo "ERROR: EXTRA_TOOLS solo admite https: $t" >&2; return 1 ;; esac
+    case "$sha" in *[!0-9a-f]*|'') echo "ERROR: EXTRA_TOOLS exige sha256 hex: $t" >&2; return 1 ;; esac
+    [ "${#sha}" = 64 ] || { echo "ERROR: sha256 de $name no tiene 64 caracteres" >&2; return 1; }
+    install_tool "$name" "$url" "$sha"
+  done
+}
+
 do_init() {
   validate_env
 
@@ -147,6 +194,8 @@ do_init() {
   if [ -n "${GITHUB_PAT:-}" ]; then
     composer config --global --auth github-oauth.github.com "$GITHUB_PAT"
   fi
+
+  install_tools
 
   echo "==> composer (APP_ENV=${APP_ENV:-production})"
   if [ "${APP_ENV:-production}" = "production" ]; then

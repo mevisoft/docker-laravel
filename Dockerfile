@@ -111,10 +111,23 @@ ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 
 COPY --from=composer/composer:2-bin /composer /usr/bin/composer
 
+# ffmpeg y ffprobe estaticos (amd64/arm64), fijados por digest.
+COPY --from=mwader/static-ffmpeg:7.0.2@sha256:d9b22f65c2049d73bf8ae556bb4c5c7d45e9fb85939d87951ed98f22b0f19105 /ffmpeg /ffprobe /usr/local/bin/
+
+# yt-dlp lo instala el init segun YTDLP_VERSION (version cambiable sin rebuild).
+# Resuelve los desafios de YouTube con el node de la imagen; por defecto solo
+# busca deno.
+RUN echo '--js-runtimes node' > /etc/yt-dlp.conf
+
 RUN useradd -u 1000 -m -s /bin/bash app \
  && mkdir -p /app/storage /app/bootstrap/cache /data \
  && chown -R app:app /app /data \
  && if [ "$WEB_SERVER" = apache ]; then chown -R app:app /var/run/apache2 /var/lock/apache2 /var/log/apache2; fi
+
+# Destino de EXTRA_TOOLS (volumen app_bin): vacio en la imagen, lo llena
+# el init. Va en el PATH para app, queue, schedule y los jobs.
+RUN mkdir -p /opt/bin
+ENV PATH=/opt/bin:$PATH
 
 COPY --chmod=755 entrypoint.sh /entrypoint.sh
 

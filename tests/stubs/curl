@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Sirve ficheros locales: STUB_CURL_DIR/<ultimo segmento de la URL>.
+echo "curl $*" >> "$STUB_LOG"
+out=""; url=""
+while [ $# -gt 0 ]; do
+  case "$1" in -o) out="$2"; shift ;; https://*) url="$1" ;; esac
+  shift
+done
+src="$STUB_CURL_DIR/${url##*/}"
+[ -f "$src" ] || exit 22
+if [ -n "$out" ]; then cp "$src" "$out"; else cat "$src"; fi
