@@ -230,7 +230,7 @@ do_init() {
     # npm install y no npm ci.
     if [ -f pnpm-lock.yaml ]; then
       pnpm install --frozen-lockfile
-      pnpm run build
+      run="pnpm run"
     elif [ -f yarn.lock ]; then
       # yarn 2+ (berry, reconocible por .yarnrc.yml) renombro --frozen-lockfile
       # a --immutable; yarn classic solo entiende el viejo.
@@ -239,13 +239,19 @@ do_init() {
       else
         yarn install --frozen-lockfile
       fi
-      yarn run build
+      run="yarn run"
     elif [ -f package-lock.json ]; then
       npm ci
-      npm run build
+      run="npm run"
     else
       npm install
-      npm run build
+      run="npm run"
+    fi
+    # Con SSR, build:ssr ya incluye el build del cliente (vite build && vite build --ssr).
+    if grep -q '"build:ssr"' package.json; then
+      $run build:ssr
+    else
+      $run build
     fi
     printf '%s\n' "$new_hash" > "$marker"
   fi
